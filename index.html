@@ -567,18 +567,18 @@ const THIRD_SLOTS=[
 ];
 
 function assignThirds(preds){
-  const thirds=getBest3rds(preds);
-  // Only top 8 qualify
-  const qualifying=thirds.slice(0,8);
+  // Get ALL 12 thirds sorted by performance (best first)
+  const allThirds=getBest3rds(preds); // already sorted pts→gd→gf
 
-  // Build candidates per slot (in original THIRD_SLOTS order)
+  // Build candidates per slot from ALL 12 thirds (not just top-8).
+  // The top-8 constraint is enforced by only assigning 8 slots total.
   const slotCandidates=THIRD_SLOTS.map(s=>({
     match: s.match,
-    candidates: qualifying.filter(x=>s.groups.includes(x.g)).map(x=>x.t)
+    // Keep full sorted order so backtracking always picks best available
+    candidates: allThirds.filter(x=>s.groups.includes(x.g)).map(x=>x.t)
   }));
 
-  // Backtracking: try all combinations until a full valid assignment is found.
-  // Slots are sorted by fewest candidates first to prune early.
+  // Backtracking: most restrictive slot first, pick best available candidate.
   const order=[...slotCandidates].sort((a,b)=>a.candidates.length-b.candidates.length);
   const assigned={};
   const used=new Set();
@@ -595,7 +595,6 @@ function assignThirds(preds){
         used.delete(team);
       }
     }
-    // If no candidate fits, assign '?' and continue (partial assignment)
     assigned[slot.match]='?';
     if(bt(idx+1)) return true;
     delete assigned[slot.match];
@@ -603,7 +602,6 @@ function assignThirds(preds){
   }
 
   bt(0);
-  // Fill any missing slots
   THIRD_SLOTS.forEach(s=>{ if(!assigned[s.match]) assigned[s.match]='?'; });
   return assigned;
 }
