@@ -267,6 +267,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .edit-inp{width:36px;height:34px;text-align:center;background:#07071a;border:2px solid var(--gold);border-radius:7px;color:var(--gold);font-size:16px;font-weight:700;outline:none;-webkit-appearance:none;}
 .edit-inp[type=number]::-webkit-inner-spin-button,.edit-inp[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;}
 </style>
+<!-- SheetJS para exportar Excel -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <!-- Firebase CDN -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -1280,7 +1282,13 @@ function buildAdminUsers(){
   const us=Object.entries(q.users||{});
   return `<div style="padding:10px;">
     <div class="card">
-      ${buildAdminQBanner(qName)}<div class="card-title">👥 Participantes (${us.length})</div>
+      ${buildAdminQBanner(qName)}
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div class="card-title" style="margin:0;">👥 Participantes (${us.length})</div>
+        <button class="btn btn-primary btn-sm" onclick="EXPORT_EXCEL('${qName}')" style="white-space:nowrap;">
+          📥 Descargar Excel
+        </button>
+      </div>
       ${us.length===0?`<p style="color:var(--muted);text-align:center;padding:16px;">Sin participantes</p>`
       :us.map(([n,u])=>{
         const stats=calcStats(u.preds||{});
@@ -1511,6 +1519,108 @@ window.SAKR=btn=>{saveNow();if(btn){btn.textContent='✅ Guardado!';setTimeout((
 window.SVP=()=>{const v=parseInt(document.getElementById('pinput').value)||0;const q=S.adminQ?getQ(S.adminQ):null;if(q)q.prize=v;save();render();};
 window.UU=n=>{if(confirm(`¿Desbloquear grupos de ${n}?`)){const q=S.adminQ?getQ(S.adminQ):null;if(q&&q.users[n]){q.users[n].locked=false;saveNow().then(()=>render());}}};
 window.DEL=n=>{if(confirm(`¿Eliminar a ${n}?`)){const q=S.adminQ?getQ(S.adminQ):null;if(q&&q.users){delete q.users[n];saveNow().then(()=>render());}}};
+
+// ===================== EXPORT EXCEL =====================
+window.EXPORT_EXCEL = function(qName) {
+  const q = getQ(qName);
+  if (!q) return;
+  const R = getResults();
+  const realResults = (R && R.results) || {};
+  const realKO = (R && R.koresults) || {};
+  const wb = XLSX.utils.book_new();
+
+  // ── HOJA 1: RANKING ──────────────────────────────────────────
+  const rankData = [['#','Participante','Pts','Exactos (2pts)','Ganador (1pt)','Fallados','Partidos jugados','Grupos bloqueado','Elim. bloqueado']];
+  const ranking = getRanking(qName);
+  ranking.forEach((r, i) => {
+    const u = q.users[r.n] || {};
+    rankData.push([
+      i + 1, r.n, r.total, r.exact, r.winner, r.miss, r.played,
+      u.locked ? 'Sí' : 'No',
+      u.kolocked ? 'Sí' : 'No'
+    ]);
+  });
+  // Add unranked (not locked yet)
+  Object.entries(q.users || {}).filter(([,u]) => !u.locked).forEach(([n, u]) => {
+    const filled = ALL.filter(m => u.preds && u.preds[m.id] && u.preds[m.id].h !== '').length;
+    rankData.push(['—', n, '—', '—', '—', '—', `${filled}/${TOTAL} capturados`, 'No', u.kolocked ? 'Sí' : 'No']);
+  });
+  const wsRank = XLSX.utils.aoa_to_sheet(rankData);
+  wsRank['!cols'] = [{wch:4},{wch:22},{wch:6},{wch:16},{wch:16},{wch:10},{wch:18},{wch:18},{wch:18}];
+  XLSX.utils.book_append_sheet(wb, wsRank, 'Ranking');
+
+  // ── HOJA 2: PREDICCIONES GRUPOS ──────────────────────────────
+  const predHdr = ['Partido','Grupo','Fecha','Hora','Local','Visitante','Pred. Local','Pred. Visitante','Resultado Real'];
+  const users = Object.keys(q.users || {});
+  users.forEach(n => predHdr.push(n));
+  const predData = [predHdr];
+
+  ALL.forEach(m => {
+    const real = realResults[m.id];
+    const realTxt = real && real.h !== '' ? `${real.h}-${real.a}` : 'Pendiente';
+    const row = [m.id, m.g, m.d, m.t, m.h, m.a, '', '', realTxt];
+    users.forEach(n => {
+      const p = (q.users[n].preds || {})[m.id];
+      row.push(p && p.h !== '' ? `${p.h}-${p.a}` : '—');
+    });
+    predData.push(row);
+  });
+  const wsPred = XLSX.utils.aoa_to_sheet(predData);
+  wsPred['!cols'] = [{wch:10},{wch:7},{wch:12},{wch:6},{wch:16},{wch:16},{wch:12},{wch:14},{wch:14}];
+  users.forEach(() => wsPred['!cols'].push({wch:14}));
+  XLSX.utils.book_append_sheet(wb, wsPred, 'Predicciones Grupos');
+
+  // ── HOJA 3: PREDICCIONES ELIMINACIÓN ─────────────────────────
+  const koHdr = ['Partido','Ronda','Fecha','Sede','Pred. Local','Pred. Visitante','Resultado Real'];
+  users.forEach(n => koHdr.push(n));
+  const koData = [koHdr];
+
+  KO_MATCHES.forEach(m => {
+    const real = realKO[m.id];
+    const realTxt = real && real.h !== '' ? `${real.h}-${real.a}` : 'Pendiente';
+    const row = [m.label, ROUND_LABELS[m.round] || m.round, m.d, m.v, m.hPos, m.aPos, realTxt];
+    users.forEach(n => {
+      const p = (q.users[n].kopreds || {})[m.id];
+      row.push(p && p.h !== '' ? `${p.h}-${p.a}` : '—');
+    });
+    koData.push(row);
+  });
+  const wsKO = XLSX.utils.aoa_to_sheet(koData);
+  wsKO['!cols'] = [{wch:8},{wch:22},{wch:12},{wch:18},{wch:18},{wch:18},{wch:14}];
+  users.forEach(() => wsKO['!cols'].push({wch:14}));
+  XLSX.utils.book_append_sheet(wb, wsKO, 'Predicciones Eliminación');
+
+  // ── HOJA 4: DETALLE POR USUARIO ──────────────────────────────
+  const detHdr = ['Participante','Partido','Grupo/Ronda','Local','Visitante','Mi predicción','Resultado Real','Puntos'];
+  const detData = [detHdr];
+  Object.entries(q.users || {}).forEach(([n, u]) => {
+    ALL.forEach(m => {
+      const p = (u.preds || {})[m.id];
+      const real = realResults[m.id];
+      const predTxt = p && p.h !== '' ? `${p.h}-${p.a}` : '—';
+      const realTxt = real && real.h !== '' ? `${real.h}-${real.a}` : 'Pendiente';
+      const res = matchResult(p, real);
+      const pts = res === 'exact' ? 2 : res === 'winner' ? 1 : res === 'pending' ? '—' : 0;
+      detData.push([n, m.id, `Grupo ${m.g}`, m.h, m.a, predTxt, realTxt, pts]);
+    });
+    KO_MATCHES.forEach(m => {
+      const p = (u.kopreds || {})[m.id];
+      const real = realKO[m.id];
+      const predTxt = p && p.h !== '' ? `${p.h}-${p.a}` : '—';
+      const realTxt = real && real.h !== '' ? `${real.h}-${real.a}` : 'Pendiente';
+      const res = matchResult(p, real);
+      const pts = res === 'exact' ? 2 : res === 'winner' ? 1 : res === 'pending' ? '—' : 0;
+      detData.push([n, m.label, ROUND_LABELS[m.round] || m.round, m.hPos, m.aPos, predTxt, realTxt, pts]);
+    });
+  });
+  const wsDet = XLSX.utils.aoa_to_sheet(detData);
+  wsDet['!cols'] = [{wch:22},{wch:10},{wch:22},{wch:16},{wch:16},{wch:14},{wch:14},{wch:7}];
+  XLSX.utils.book_append_sheet(wb, wsDet, 'Detalle por usuario');
+
+  // ── DESCARGAR ─────────────────────────────────────────────────
+  const fecha = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `Quiniela_${qName}_${fecha}.xlsx`);
+};
 
 load();
 </script>
