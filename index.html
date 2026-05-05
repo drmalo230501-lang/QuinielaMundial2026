@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -504,7 +503,7 @@ function getGroupPos(g, pos, preds){
   return st[pos-1]?st[pos-1].t:'?';
 }
 
-// Get 3rd place teams from all groups sorted
+// Get 3rd place teams from all groups sorted (top 8 qualify)
 function getBest3rds(preds){
   const thirds=[];
   'ABCDEFGHIJKL'.split('').forEach(g=>{
@@ -512,7 +511,60 @@ function getBest3rds(preds){
     if(st[2]) thirds.push({t:st[2].t,pts:st[2].pts,gd:st[2].gd,gf:st[2].gf,g});
   });
   thirds.sort((a,b)=>b.pts-a.pts||b.gd-a.gd||b.gf-a.gf);
-  return thirds;
+  return thirds; // all 12, top 8 qualify
+}
+
+// Assign 8 best-thirds to the 8 slots without repeating any team.
+// Each slot has a list of candidate groups; we pick the best available third from those groups.
+// Slots are processed in priority order (best slot first gets first pick).
+// Slot order by "most restrictive" (fewest candidate groups) first:
+const THIRD_SLOTS=[
+  // id of the KO match -> candidate groups for that slot
+  {match:'p74', groups:'ABCDF'.split('')},
+  {match:'p77', groups:'CDFGH'.split('')},
+  {match:'p79', groups:'CEFHI'.split('')},
+  {match:'p80', groups:'EHIJK'.split('')},
+  {match:'p81', groups:'BEFIJ'.split('')},
+  {match:'p82', groups:'AEHIJ'.split('')},
+  {match:'p85', groups:'EFGIJ'.split('')},
+  {match:'p87', groups:'DEIJL'.split('')},
+];
+
+function assignThirds(preds){
+  const thirds=getBest3rds(preds);
+  // Only top 8 qualify
+  const qualifying=thirds.slice(0,8);
+  const assigned={}; // matchId -> team
+  const used=new Set();
+
+  // Sort slots by number of available candidates ascending (most restrictive first)
+  // so that slots with fewer options get priority
+  const slotsWithCandidates=THIRD_SLOTS.map(s=>({
+    ...s,
+    candidates: qualifying.filter(x=>s.groups.includes(x.g))
+  }));
+
+  // Greedy assignment: most restrictive slot first
+  const sorted=[...slotsWithCandidates].sort((a,b)=>a.candidates.length-b.candidates.length);
+  for(const slot of sorted){
+    const pick=slot.candidates.find(x=>!used.has(x.t));
+    if(pick){
+      assigned[slot.match]=pick.t;
+      used.add(pick.t);
+    } else {
+      assigned[slot.match]='?';
+    }
+  }
+  return assigned;
+}
+
+// Cache thirds assignment per preds reference to avoid recomputing
+let _thirdsCache=null, _thirdsPreds=null;
+function getThirdsAssignment(preds){
+  if(_thirdsPreds===preds) return _thirdsCache;
+  _thirdsPreds=preds;
+  _thirdsCache=assignThirds(preds);
+  return _thirdsCache;
 }
 
 function resolveKOTeam(pos, preds, koPreds){
@@ -521,14 +573,12 @@ function resolveKOTeam(pos, preds, koPreds){
   const m1=pos.match(/^(\d)([A-L])$/);
   if(m1) return getGroupPos(m1[2],parseInt(m1[1]),preds);
   if(pos.startsWith('3')){
-    // Best thirds
-    const thirds=getBest3rds(preds);
-    const allowed=pos.slice(1).split('');
-    const filtered=thirds.filter(x=>allowed.includes(x.g));
-    // For specific slot, we simplify: return top from filtered by slot index
-    // Here we just return in order from best3rds filtered
-    const idx=0; // simplified: first available
-    return filtered[idx]?filtered[idx].t:'?';
+    // Find which KO match this slot belongs to
+    const allowedGroups=pos.slice(1).split('');
+    const slot=THIRD_SLOTS.find(s=>s.groups.join('')===allowedGroups.join(''));
+    if(!slot) return '?';
+    const assignment=getThirdsAssignment(preds);
+    return assignment[slot.match]||'?';
   }
   const mGana=pos.match(/^Gana P(\d+)$/);
   if(mGana){
