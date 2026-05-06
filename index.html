@@ -240,6 +240,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .std-legend{display:flex;gap:8px;flex-wrap:wrap;padding:0 10px 12px;font-size:9px;color:var(--muted);}
 .std-legend span{display:flex;align-items:center;gap:4px;}
 
+/* TOAST NOTIFICATIONS */
+#toast-container{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:99999;display:flex;flex-direction:column;gap:6px;max-width:340px;width:90%;pointer-events:none;}
+.toast{background:#1a1a3e;border:1px solid rgba(255,215,0,0.3);border-radius:12px;padding:10px 14px;font-size:12px;font-weight:600;color:#fff;box-shadow:0 4px 20px rgba(0,0,0,0.5);display:flex;align-items:center;gap:8px;animation:toastIn .3s ease;pointer-events:all;}
+.toast.toast-exact{border-color:rgba(0,200,83,0.5);background:rgba(0,40,20,0.95);}
+.toast.toast-winner{border-color:rgba(255,215,0,0.5);background:rgba(40,30,0,0.95);}
+.toast.toast-miss{border-color:rgba(220,50,50,0.5);background:rgba(40,0,0,0.95);}
+.toast.toast-info{border-color:rgba(100,150,255,0.4);background:rgba(10,20,60,0.95);}
+@keyframes toastIn{from{opacity:0;transform:translateY(-10px);}to{opacity:1;transform:translateY(0);}}
+@keyframes toastOut{to{opacity:0;transform:translateY(-10px);}}
+
 /* FLOATING SAVE BUTTON */
 .fab-save{
   position:fixed;bottom:80px;right:16px;z-index:200;
@@ -1151,6 +1161,30 @@ function matchResult(pred,real){
   if(rh===ph&&ra===pa) return 'exact';
   return 'winner';
 }
+// ── Achievements ────────────────────────────────────────────────────────────
+function getAchievements(preds, kopreds){
+  const R=getResults();
+  const realRes=R.results||{};
+  const badges=[];
+  let streak=0, maxStreak=0, exactCount=0, missCount=0;
+  for(const m of ALL){
+    const res=matchResult(preds[m.id],realRes[m.id]);
+    if(res==='pending') continue;
+    if(res==='exact'){streak++;exactCount++;maxStreak=Math.max(maxStreak,streak);}
+    else{streak=0;}
+    if(res==='miss') missCount++;
+  }
+  if(exactCount>=10) badges.push({icon:'🎯',label:'Francotirador',desc:'10+ marcadores exactos'});
+  if(exactCount>=5)  badges.push({icon:'🔥',label:'En llamas',desc:'5+ exactos'});
+  if(maxStreak>=3)   badges.push({icon:'⚡',label:'Racha x'+maxStreak,desc:maxStreak+' exactos seguidos'});
+  if(missCount===0&&Object.values(realRes).some(r=>r&&r.h!==''))
+                     badges.push({icon:'🌟',label:'Sin fallos',desc:'0 resultados incorrectos'});
+  const champ=getUserChampion({preds,kopreds,locked:true});
+  const realChamp=getRealChampion();
+  if(champ&&realChamp&&champ===realChamp) badges.push({icon:'👑',label:'¡Adivino!',desc:'Acertaste al campeón'});
+  return badges;
+}
+
 function calcStats(preds, kopreds){
   const R=getResults();
   const realRes=R.results||{};
@@ -1201,9 +1235,22 @@ function calcStats(preds, kopreds){
 }
 function getRanking(quinielaName){
   const q=getQ(quinielaName); if(!q) return [];
-  return Object.entries(q.users||{}).filter(([,u])=>u.locked)
+  const ranked=Object.entries(q.users||{}).filter(([,u])=>u.locked)
     .map(([n,u])=>({n,...calcStats(u.preds||{},u.kopreds||{})}))
     .sort((a,b)=>b.total-a.total||b.exact-a.exact);
+  // Store prev ranking snapshot in memory for arrows
+  if(!window._prevRank) window._prevRank={};
+  const prev=window._prevRank[quinielaName]||{};
+  ranked.forEach((u,i)=>{
+    const prevPos=prev[u.n];
+    u.arrow = prevPos===undefined?'new':prevPos>i?'up':prevPos<i?'down':'same';
+    u.prevPos=prevPos;
+  });
+  // Update snapshot after current results
+  const snap={};
+  ranked.forEach((u,i)=>snap[u.n]=i);
+  window._prevRank[quinielaName]=snap;
+  return ranked;
 }
 
 // ===================== RENDER =====================
@@ -1214,12 +1261,28 @@ function buildHTML(){
   const content=buildContent();
   const nav=S.admin?buildAdminNav():buildUserNav();
   const qLabel=S.admin?(S.adminQ?`⚙️ Admin: ${S.adminQ}`:'⚙️ Todas las quinielas'):`👤 ${S.cur.name} · ${S.cur.quinielaName}`;
+  const deadline=new Date('2026-06-11T00:00:00');
+  const now2=new Date();
+  const diff=deadline-now2;
+  let countdownHtml='';
+  if(diff>0){
+    const days=Math.floor(diff/86400000);
+    const hrs=Math.floor((diff%86400000)/3600000);
+    const mins=Math.floor((diff%3600000)/60000);
+    countdownHtml=`<div id="countdown" style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,215,0,0.1);border:1px solid rgba(255,215,0,0.25);border-radius:20px;padding:3px 10px;margin-top:4px;font-size:10px;color:var(--gold);font-weight:700;">
+      ⏳ Deadline grupos: <span style="font-variant-numeric:tabular-nums;">${days}d ${hrs}h ${mins}m</span>
+    </div>`;
+  } else {
+    countdownHtml=`<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(220,50,50,0.1);border:1px solid rgba(220,50,50,0.3);border-radius:20px;padding:3px 10px;margin-top:4px;font-size:10px;color:#ff8a8a;font-weight:700;">🔒 Registro de grupos cerrado</div>`;
+  }
   return `<div class="header">
     <span class="trophy">🏆</span>
     <h1>Quiniela Mundial 2026</h1>
     <p>${qLabel} &nbsp;·&nbsp; 🇺🇸🇲🇽🇨🇦</p>
+    ${countdownHtml}
   </div>
   <div class="scroll-content" id="sc">${content}</div>
+  <div id="toast-container"></div>
   ${nav}`;
 }
 
@@ -1227,6 +1290,7 @@ function buildUserNav(){
   const tabs=[
     {id:'grupos',icon:'⚽',label:'Grupos'},
     {id:'eliminacion',icon:'🏆',label:'Eliminación'},
+    {id:'bracket',icon:'🌳',label:'Bracket'},
     {id:'resultados',icon:'📊',label:'Resultados'},
     {id:'ranking',icon:'🏅',label:'Ranking'},
     {id:'instrucciones',icon:'📋',label:'Reglas'},
@@ -1258,10 +1322,80 @@ function buildContent(){
   }
   if(S.tab==='grupos') return buildGrupos();
   if(S.tab==='eliminacion') return buildEliminacion();
+  if(S.tab==='bracket') return buildBracket();
   if(S.tab==='resultados') return buildResultados();
   if(S.tab==='ranking') return buildRanking();
   if(S.tab==='instrucciones') return buildInstrucciones();
   return buildGrupos();
+}
+
+// ===================== BRACKET VIEW =====================
+function buildBracket(){
+  const user=curUser();
+  const preds=(user&&user.preds)||{};
+  const kopreds=(user&&user.kopreds)||{};
+  const R=getResults();
+  const realKO=R.koresults||{};
+  const realRes=R.results||{};
+
+  function teamBox(pos, useReal){
+    const t=useReal
+      ? resolveKOTeam(pos,realRes,realKO)
+      : resolveKOTeam(pos,preds,kopreds);
+    const isPending=!t||t==='?';
+    return `<div style="display:flex;align-items:center;gap:5px;padding:4px 7px;background:${isPending?'rgba(255,255,255,0.03)':'rgba(255,255,255,0.06)'};border-radius:6px;min-width:110px;max-width:130px;overflow:hidden;">
+      <span style="font-size:13px;flex-shrink:0">${isPending?'❓':F(t)}</span>
+      <span style="font-size:9px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${isPending?'var(--muted)':'#fff'}">${isPending?'Por definir':t}</span>
+    </div>`;
+  }
+
+  function matchBox(m, useReal){
+    const r=useReal?realKO[m.id]:kopreds[m.id];
+    const score=r&&r.h!==''?`${r.h}-${r.a}`:'vs';
+    return `<div style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;">
+      <div style="font-size:8px;color:var(--muted);margin-bottom:1px;">${m.label}</div>
+      ${teamBox(m.hPos,useReal)}
+      <div style="font-size:10px;font-weight:800;color:var(--gold);text-align:center;padding:0 7px;">${score}</div>
+      ${teamBox(m.aPos,useReal)}
+    </div>`;
+  }
+
+  function roundCol(round, useReal){
+    const ms=KO_MATCHES.filter(m=>m.round===round);
+    return `<div style="display:flex;flex-direction:column;gap:12px;justify-content:space-around;flex:1;">
+      <div style="font-size:9px;font-weight:800;color:var(--gold);text-align:center;margin-bottom:4px;">${ROUND_LABELS[round]||round}</div>
+      ${ms.map(m=>matchBox(m,useReal)).join('<div style="flex:1;min-height:8px;"></div>')}
+    </div>`;
+  }
+
+  function buildHalfBracket(useReal){
+    const label=useReal?'⚽ Resultados reales':'📋 Mis predicciones';
+    const hasReal=Object.values(realKO).some(r=>r&&r.h!=='');
+    if(useReal&&!hasReal) return `<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">⏳ Aún no hay resultados reales de eliminación</div>`;
+    return `<div style="margin-bottom:6px;font-size:11px;font-weight:800;color:${useReal?'#7aadff':'var(--gold)'};padding:0 4px;">${label}</div>
+    <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;align-items:flex-start;">
+      ${['D16','R16','QF','SF'].map(r=>roundCol(r,useReal)).join('')}
+      <div style="display:flex;flex-direction:column;gap:8px;flex:1;">
+        <div style="font-size:9px;font-weight:800;color:var(--gold);text-align:center;margin-bottom:4px;">Final</div>
+        ${matchBox(KO_MATCHES.find(m=>m.round==='FIN'),useReal)}
+        <div style="font-size:9px;font-weight:800;color:var(--muted);text-align:center;margin-top:4px;">3° Lugar</div>
+        ${matchBox(KO_MATCHES.find(m=>m.round==='3P'),useReal)}
+      </div>
+    </div>`;
+  }
+
+  if(!user||!user.locked) return `<div style="padding:20px;text-align:center;color:var(--muted);">🔒 Bloquea tu quiniela de grupos para ver el bracket</div>`;
+
+  return `<div style="padding:10px;">
+    <div class="card" style="margin-bottom:10px;">
+      <div class="card-title">🌳 Bracket — Mis predicciones</div>
+      ${buildHalfBracket(false)}
+    </div>
+    <div class="card">
+      <div class="card-title">🌳 Bracket — Resultados reales</div>
+      ${buildHalfBracket(true)}
+    </div>
+  </div>`;
 }
 
 // ===================== LOGIN =====================
@@ -1684,23 +1818,92 @@ function buildRanking(){
         <th>✔</th>
         <th>❌</th>
         <th>vs 1°</th>
+        <th>🏆 Campeón</th>
       </tr></thead>
       <tbody>
       ${rank.length===0?`<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px;">Sin participantes guardados</td></tr>`
       :rank.map((u,i)=>`<tr class="${i===0?'top1':i===1?'top2':i===2?'top3':''}">
         <td style="font-size:14px;">${i<3?medals[i]:(i+1)}</td>
-        <td><strong style="cursor:pointer;text-decoration:underline dotted;color:var(--gold);"
-            onclick="VIEW_PROFILE('${u.n}','${qName}')">${u.n}</strong>${i===0&&rank.length>1?' 👑':''}</td>
+        <td>
+          <strong style="cursor:pointer;text-decoration:underline dotted;color:var(--gold);"
+            onclick="VIEW_PROFILE('${u.n}','${qName}')">${u.n}</strong>${i===0&&rank.length>1?' 👑':''}
+          ${u.arrow==='up'?'<span style="color:#69ff6e;font-size:10px;margin-left:3px;">▲</span>':u.arrow==='down'?'<span style="color:#ff8a8a;font-size:10px;margin-left:3px;">▼</span>':u.arrow==='new'?'<span style="font-size:9px;color:var(--muted);margin-left:3px;">nuevo</span>':''}
+        </td>
         <td class="pts-big">${u.total}</td>
         <td><span class="bs bs-g">${u.exact}</span></td>
         <td><span class="bs bs-y">${u.winner}</span></td>
         <td><span class="bs bs-r">${u.miss}</span></td>
         <td class="${i===0?'diff-zero':'diff-red'}">${i===0?'—':'-'+(topPts-u.total)}</td>
+        <td style="font-size:11px;">${(()=>{
+          const q2=getQ(qName);
+          const usr=q2&&q2.users[u.n];
+          const champ=usr?getUserChampion(usr):null;
+          const realChamp=getRealChampion();
+          if(!champ) return '<span style="color:var(--muted)">—</span>';
+          const correct=realChamp&&champ===realChamp;
+          const wrong=realChamp&&champ!==realChamp;
+          return `<span style="color:${correct?'#69ff6e':wrong?'#ff8a8a':'#fff'}">${F(champ)} ${champ}</span>`;
+        })()}</td>
       </tr>`).join('')}
       </tbody>
     </table>
     </div>
     <div style="padding:8px 14px;font-size:10px;color:var(--muted);">✅ Exacto +2pts · ✔ Ganador +1pt · vs 1° = diferencia con el líder</div>
+  </div>
+  ${buildPointsChart(qName)}`;
+}
+
+function buildPointsChart(qName){
+  const q=getQ(qName); if(!q) return '';
+  const R=getResults();
+  const realRes=R.results||{};
+  // Get all played matches in order
+  const played=ALL.filter(m=>{const r=realRes[m.id];return r&&r.h!==''&&r.h!==undefined;});
+  if(played.length<2) return '';
+  const users=Object.entries(q.users||{}).filter(([,u])=>u.locked);
+  if(!users.length) return '';
+
+  // Compute cumulative points per match for each user
+  const colors=['#FFD700','#69ff6e','#ff8a8a','#7aadff','#ff9f43','#a29bfe','#fd79a8','#00cec9'];
+  const series=users.map(([n,u],ci)=>{
+    let cum=0;
+    const pts=played.map(m=>{
+      const res=matchResult((u.preds||{})[m.id],realRes[m.id]);
+      if(res==='exact') cum+=2;
+      else if(res==='winner') cum+=1;
+      return cum;
+    });
+    return{n,pts,color:colors[ci%colors.length]};
+  });
+
+  const maxPts=Math.max(...series.map(s=>Math.max(...s.pts)),1);
+  const W=320,H=160,padL=28,padB=24,padT=10,padR=10;
+  const gW=W-padL-padR, gH=H-padB-padT;
+  const xStep=gW/(played.length-1||1);
+
+  const lines=series.map(s=>{
+    const pts=s.pts.map((p,i)=>`${padL+i*xStep},${padT+gH-(p/maxPts)*gH}`).join(' ');
+    return `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${padL+(played.length-1)*xStep}" cy="${padT+gH-(s.pts[s.pts.length-1]/maxPts)*gH}" r="4" fill="${s.color}"/>
+    <text x="${padL+(played.length-1)*xStep+5}" y="${padT+gH-(s.pts[s.pts.length-1]/maxPts)*gH+4}" font-size="8" fill="${s.color}">${s.n.slice(0,8)}</text>`;
+  }).join('');
+
+  // Y axis labels
+  const yLabels=[0,Math.round(maxPts/2),maxPts].map(v=>`
+    <text x="${padL-3}" y="${padT+gH-(v/maxPts)*gH+4}" font-size="8" fill="rgba(255,255,255,0.4)" text-anchor="end">${v}</text>
+    <line x1="${padL}" y1="${padT+gH-(v/maxPts)*gH}" x2="${padL+gW}" y2="${padT+gH-(v/maxPts)*gH}" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>`).join('');
+
+  return `<div style="padding:10px;">
+    <div class="card">
+      <div class="card-title">📈 Evolución de puntos</div>
+      <div style="overflow-x:auto;">
+        <svg viewBox="0 0 ${W} ${H}" style="width:100%;min-width:280px;" xmlns="http://www.w3.org/2000/svg">
+          ${yLabels}${lines}
+          <text x="${padL}" y="${H-6}" font-size="8" fill="rgba(255,255,255,0.3)">Inicio</text>
+          <text x="${padL+gW}" y="${H-6}" font-size="8" fill="rgba(255,255,255,0.3)" text-anchor="end">J${played.length}</text>
+        </svg>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -2011,7 +2214,8 @@ function buildAdminUsers(){
           </div>
         </div>`;}).join('')}
     </div>
-  </div>`;
+  </div>
+  ${buildCoAdminSection()}`;
 }
 
 // ===================== INSTRUCCIONES =====================
@@ -2098,6 +2302,38 @@ function buildInstrucciones(){
 }
 
 // ===================== PLAYER PROFILE VIEW =====================
+// ── Champion prediction helper ──────────────────────────────────────────────
+function getUserChampion(u){
+  if(!u||!u.locked) return null;
+  const preds=u.preds||{};
+  const kopreds=u.kopreds||{};
+  // Resolve winner of the final (p104)
+  const finMatch=KO_MATCHES.find(m=>m.round==='FIN');
+  if(!finMatch) return null;
+  const fp=kopreds[finMatch.id];
+  if(!fp||fp.h==='') return null;
+  const rh=parseInt(fp.h),ra=parseInt(fp.a);
+  if(isNaN(rh)||isNaN(ra)||rh===ra) return null;
+  const ht=resolveKOTeam(finMatch.hPos,preds,kopreds);
+  const at=resolveKOTeam(finMatch.aPos,preds,kopreds);
+  return rh>ra?ht:at;
+}
+
+function getRealChampion(){
+  const R=getResults();
+  const realKO=R.koresults||{};
+  const realRes=R.results||{};
+  const finMatch=KO_MATCHES.find(m=>m.round==='FIN');
+  if(!finMatch) return null;
+  const fp=realKO[finMatch.id];
+  if(!fp||fp.h==='') return null;
+  const rh=parseInt(fp.h),ra=parseInt(fp.a);
+  if(isNaN(rh)||isNaN(ra)||rh===ra) return null;
+  const ht=resolveKOTeam(finMatch.hPos,realRes,realKO);
+  const at=resolveKOTeam(finMatch.aPos,realRes,realKO);
+  return rh>ra?ht:at;
+}
+
 window.VIEW_PROFILE=function(playerName, qName){
   const q=getQ(qName); if(!q) return;
   const u=q.users[playerName]; if(!u) return;
@@ -2188,6 +2424,13 @@ window.VIEW_PROFILE=function(playerName, qName){
         <button onclick="document.getElementById('profile-modal').remove()"
           style="background:rgba(255,255,255,0.1);border:none;color:#fff;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer;">✕</button>
       </div>
+      ${(()=>{
+        const badges=getAchievements(preds,kopreds);
+        if(!badges.length) return '';
+        return '<div style="padding:10px 14px;display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid rgba(255,255,255,0.06);">'+
+          badges.map(b=>`<span title="${b.desc}" style="background:rgba(255,215,0,0.12);border:1px solid rgba(255,215,0,0.3);border-radius:20px;padding:3px 9px;font-size:11px;font-weight:700;cursor:help;">${b.icon} ${b.label}</span>`).join('')+
+        '</div>';
+      })()}
       <div style="display:flex;gap:8px;padding:12px;background:rgba(255,255,255,0.03);border-bottom:1px solid rgba(255,255,255,0.06);">
         <div style="flex:1;text-align:center;">
           <div style="font-size:22px;font-weight:800;color:var(--gold);">${stats.total}</div>
@@ -2221,12 +2464,51 @@ window.VIEW_PROFILE=function(playerName, qName){
           <tbody>${koRows}</tbody>
         </table>
       </div>`:'<div style="padding:12px;font-size:11px;color:var(--muted);text-align:center;">⏳ Fase eliminatoria aún no bloqueada</div>'}
-      <div style="padding:12px;text-align:center;">
-        <button onclick="document.getElementById('profile-modal').remove()" class="btn btn-secondary">Cerrar</button>
+      <div style="padding:12px;display:flex;gap:8px;justify-content:center;">
+        <button onclick="SHARE_CARD('${playerName}','${qName}')" class="btn btn-primary" style="flex:1;">📤 Compartir</button>
+        <button onclick="EXPORT_MY_PDF('${playerName}','${qName}')" class="btn btn-secondary" style="flex:1;">📄 PDF</button>
+        <button onclick="document.getElementById('profile-modal').remove()" class="btn btn-secondary">✕ Cerrar</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
 };
+
+// ===================== TOAST NOTIFICATIONS =====================
+function showToast(msg, type='info', duration=3500){
+  let tc=document.getElementById('toast-container');
+  if(!tc){tc=document.createElement('div');tc.id='toast-container';document.body.appendChild(tc);}
+  const t=document.createElement('div');
+  t.className='toast toast-'+type;
+  t.innerHTML=msg;
+  tc.appendChild(t);
+  setTimeout(()=>{
+    t.style.animation='toastOut .3s ease forwards';
+    setTimeout(()=>t.remove(),300);
+  },duration);
+}
+
+// Called after admin saves a result to notify about user impacts
+function notifyResultSaved(matchId, h, a, isKO){
+  const R=getResults();
+  const mData=isKO?KO_MATCHES.find(m=>m.id===matchId):ALL.find(m=>m.id===matchId);
+  if(!mData) return;
+  const label=isKO?mData.label:matchId.toUpperCase();
+  showToast(`⚽ Resultado guardado: <strong>${label}</strong> ${h}-${a}`, 'info', 2500);
+
+  // Check current user's prediction if logged in
+  if(S.cur){
+    const q=getQ(S.cur.quinielaName);
+    const u=q&&q.users[S.cur.name];
+    if(!u) return;
+    const pred=isKO?(u.kopreds||{})[matchId]:(u.preds||{})[matchId];
+    if(!pred||pred.h==='') return;
+    const real={h:String(h),a:String(a)};
+    const res=matchResult(pred,real);
+    if(res==='exact') showToast(`✅ ¡Marcador exacto! +2 pts en ${label}`, 'exact', 4000);
+    else if(res==='winner') showToast(`✔ Acertaste el ganador. +1 pt en ${label}`, 'winner', 4000);
+    else if(res==='miss') showToast(`❌ Fallaste ${label}. 0 pts`, 'miss', 3000);
+  }
+}
 
 // ===================== EVENTS =====================
 window.ST=t=>{S.tab=t;render();const sc=document.getElementById('sc');if(sc)sc.scrollTop=0;};
@@ -2245,7 +2527,16 @@ window.DL=()=>{
 };
 window.DA=()=>{
   const p=(document.getElementById('ap2')||{}).value||'';
-  if(p===ADMIN_PASS){S.admin=true;S.adminQ=null;S.tab='aq';render();}
+  if(p===ADMIN_PASS){S.admin=true;S.adminQ=null;S.tab='aq';render();return;}
+  // Co-admin: can capture results but not manage quinielas
+  const cas=getCoAdmins();
+  if(cas[p]){
+    S.admin=true;
+    S.adminQ=Object.keys(S.quinielas).filter(k=>k!=='__results__'&&k!=='__coadmins__')[0]||null;
+    S.tab='ar';
+    S.isCoadmin=true;
+    render();
+  }
   else showErr('Contraseña incorrecta');
 };
 window.CREATE_Q=()=>{
@@ -2257,6 +2548,21 @@ window.CREATE_Q=()=>{
   S.quinielas[qName]={users:{},prize};
   saveNow().then(()=>render());
 };
+// ── Co-admin section in buildAdminUsers ─────────────────────────────────────
+function buildCoAdminSection(){
+  const cas=Object.keys(getCoAdmins());
+  return `<div class="card" style="margin:10px;border-color:rgba(100,150,255,0.3);">
+    <div class="card-title" style="color:#7aadff;">🔑 Co-administradores</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Los co-admins pueden capturar resultados pero no pueden crear/borrar quinielas ni usuarios.</div>
+    ${cas.length===0?'<div style="font-size:11px;color:var(--muted);">Sin co-admins configurados</div>':
+      cas.map(pw=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+        <span style="font-size:12px;font-family:monospace;color:#fff;">🔐 ${'•'.repeat(pw.length)}</span>
+        <button onclick="DEL_COADMIN('${pw}')" class="btn btn-danger btn-sm">Eliminar</button>
+      </div>`).join('')}
+    <button onclick="ADD_COADMIN()" class="btn btn-primary btn-full" style="margin-top:10px;">+ Agregar co-admin</button>
+  </div>`;
+}
+
 window.DEL_Q=qn=>{
   if(!confirm('¿Eliminar la quiniela "'+qn+'" y todos sus datos?')) return;
   delete S.quinielas[qn];
@@ -2319,7 +2625,13 @@ window.SR=(id,side,val)=>{
   if(!R.results[id])R.results[id]={h:'',a:''};
   R.results[id][side]=val===''?'':(parseInt(val)>=0?parseInt(val):0);
 };
-window.SAR=btn=>{_realThirdsCache=null;saveNow();if(btn){btn.textContent='✅ Guardado!';setTimeout(()=>btn.textContent='💾 Guardar Resultados de Grupos',2000);}};
+window.SAR=btn=>{
+  _realThirdsCache=null;
+  const mid=btn.getAttribute('data-mid');
+  const rh=btn.getAttribute('data-h');
+  const ra=btn.getAttribute('data-a');
+  if(mid&&rh!==''&&ra!=='') notifyResultSaved(mid,rh,ra,false);
+  saveNow();if(btn){btn.textContent='✅ Guardado!';setTimeout(()=>btn.textContent='💾 Guardar Resultados de Grupos',2000);}};
 window.FAB_SAVE=async btn=>{
   await saveNow();
   if(btn){
@@ -2397,11 +2709,116 @@ window.SKR=(id,side,val)=>{_realThirdsCache=null;
   if(!R.koresults[id])R.koresults[id]={h:'',a:''};
   R.koresults[id][side]=val===''?'':(parseInt(val)>=0?parseInt(val):0);
 };
-window.SAKR=btn=>{_realThirdsCache=null;saveNow();if(btn){btn.textContent='✅ Guardado!';setTimeout(()=>btn.textContent='💾 Guardar Resultados Eliminación',2000);}};
+window.SAKR=btn=>{
+  _realThirdsCache=null;
+  const mid=btn.getAttribute('data-mid');
+  const rh=btn.getAttribute('data-h');
+  const ra=btn.getAttribute('data-a');
+  if(mid&&rh!==''&&ra!=='') notifyResultSaved(mid,rh,ra,true);
+  saveNow();if(btn){btn.textContent='✅ Guardado!';setTimeout(()=>btn.textContent='💾 Guardar Resultados Eliminación',2000);}};
 
 window.SVP=()=>{const v=parseInt(document.getElementById('pinput').value)||0;const q=S.adminQ?getQ(S.adminQ):null;if(q)q.prize=v;save();render();};
 window.UU=n=>{if(confirm(`¿Desbloquear grupos de ${n}?`)){const q=S.adminQ?getQ(S.adminQ):null;if(q&&q.users[n]){q.users[n].locked=false;saveNow().then(()=>render());}}};
+
+// ── Co-admin management ──────────────────────────────────────────────────────
+function getCoAdmins(){ return S.quinielas['__coadmins__']||{}; }
+window.ADD_COADMIN=async()=>{
+  const pw=prompt('Nueva contraseña de co-administrador:');
+  if(!pw||pw.trim()==='') return;
+  if(!S.quinielas['__coadmins__']) S.quinielas['__coadmins__']={};
+  S.quinielas['__coadmins__'][pw.trim()]=true;
+  await saveNow(); render();
+  showToast('✅ Co-admin agregado','info');
+};
+window.DEL_COADMIN=async(pw)=>{
+  if(!confirm('¿Eliminar esta contraseña de co-admin?')) return;
+  if(S.quinielas['__coadmins__']) delete S.quinielas['__coadmins__'][pw];
+  await saveNow(); render();
+};
+
 window.DEL=n=>{if(confirm(`¿Eliminar a ${n}?`)){const q=S.adminQ?getQ(S.adminQ):null;if(q&&q.users){delete q.users[n];saveNow().then(()=>render());}}};
+
+// ===================== SHARE CARD =====================
+window.SHARE_CARD=function(playerName, qName){
+  const q=getQ(qName); if(!q) return;
+  const u=q.users[playerName]; if(!u) return;
+  const stats=calcStats(u.preds||{},u.kopreds||{});
+  const rank=getRanking(qName);
+  const pos=rank.findIndex(r=>r.n===playerName)+1;
+  const champ=getUserChampion(u);
+  const badges=getAchievements(u.preds||{},u.kopreds||{});
+  const canvas=document.createElement('canvas');
+  canvas.width=600;canvas.height=320;
+  const ctx=canvas.getContext('2d');
+  const grad=ctx.createLinearGradient(0,0,600,320);
+  grad.addColorStop(0,'#07071a');grad.addColorStop(1,'#162a5e');
+  ctx.fillStyle=grad;ctx.fillRect(0,0,600,320);
+  ctx.strokeStyle='rgba(255,215,0,0.4)';ctx.lineWidth=2;ctx.strokeRect(4,4,592,312);
+  ctx.font='40px serif';ctx.fillText('\u{1F3C6}',24,64);
+  ctx.fillStyle='#FFD700';ctx.font='bold 22px sans-serif';ctx.fillText('Quiniela Mundial 2026',78,44);
+  ctx.fillStyle='rgba(255,255,255,0.6)';ctx.font='13px sans-serif';ctx.fillText(qName,78,64);
+  ctx.fillStyle='#ffffff';ctx.font='bold 32px sans-serif';ctx.fillText(playerName,24,115);
+  ctx.fillStyle='#FFD700';ctx.font='bold 16px sans-serif';
+  ctx.fillText(pos>0?'#'+pos+' en el ranking':'Participante',24,140);
+  [{label:'Puntos',val:stats.total,color:'#FFD700'},{label:'\u2705 Exactos',val:stats.exact,color:'#69ff6e'},
+   {label:'\u2714 Ganador',val:stats.winner,color:'#FFD700'},{label:'\u274C Fallados',val:stats.miss,color:'#ff8a8a'}]
+  .forEach((b,i)=>{
+    const x=24+i*142;
+    ctx.fillStyle='rgba(255,255,255,0.07)';
+    ctx.beginPath();ctx.roundRect(x,160,130,70,8);ctx.fill();
+    ctx.fillStyle=b.color;ctx.font='bold 28px sans-serif';ctx.fillText(String(b.val),x+12,200);
+    ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font='11px sans-serif';ctx.fillText(b.label,x+12,224);
+  });
+  if(champ){
+    ctx.fillStyle='rgba(255,255,255,0.07)';ctx.beginPath();ctx.roundRect(24,244,280,52,8);ctx.fill();
+    ctx.fillStyle='#FFD700';ctx.font='bold 13px sans-serif';ctx.fillText('\u{1F451} Mi campe\u00f3n:',36,266);
+    ctx.fillStyle='#ffffff';ctx.font='bold 18px sans-serif';ctx.fillText(champ,36,289);
+  }
+  if(badges.length){ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font='11px sans-serif';ctx.fillText(badges.map(b=>b.icon+' '+b.label).join('  '),320,264);}
+  ctx.fillStyle='rgba(255,255,255,0.3)';ctx.font='11px sans-serif';ctx.fillText('Quiniela Mundial 2026',320,296);
+  canvas.toBlob(blob=>{
+    const file=new File([blob],'quiniela-'+playerName+'.png',{type:'image/png'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      navigator.share({title:'Mi Quiniela Mundial 2026',files:[file]}).catch(()=>{});
+    } else {
+      const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='quiniela-'+playerName+'.png';a.click();
+    }
+  });
+};
+
+// ===================== PDF EXPORT =====================
+window.EXPORT_MY_PDF=async function(playerName, qName){
+  const q=getQ(qName);if(!q)return;
+  const u=q.users[playerName];if(!u)return;
+  const R=getResults();
+  const realRes=R.results||{};
+  const preds=u.preds||{};
+  const kopreds=u.kopreds||{};
+  const stats=calcStats(preds,kopreds);
+  const rank=getRanking(qName);
+  const pos=rank.findIndex(r=>r.n===playerName)+1;
+  const champ=getUserChampion(u)||'\u2014';
+  const rows=ALL.map(m=>{
+    const p=preds[m.id];const r=realRes[m.id];
+    const pred=p&&p.h!==''?p.h+'-'+p.a:'\u2014';
+    const real=r&&r.h!==''?r.h+'-'+r.a:'Pendiente';
+    const res=matchResult(p,r);
+    const bg=res==='exact'?'#e6fff0':res==='winner'?'#fffbe6':res==='miss'?'#fff0f0':'';
+    const pts=res==='exact'?'+2':res==='winner'?'+1':res==='miss'?'0':'';
+    return '<tr style="background:'+bg+'"><td>'+m.id+'</td><td>Grupo '+m.g+'</td><td>'+m.h+'</td><td>'+m.a+'</td><td style="font-weight:bold;text-align:center">'+pred+'</td><td style="text-align:center;color:#666">'+real+'</td><td style="text-align:center;font-weight:bold">'+pts+'</td></tr>';
+  }).join('');
+  const html='<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:sans-serif;padding:20px;font-size:11px}h1{color:#1a1a5e;font-size:18px}h2{font-size:13px;margin:16px 0 6px}.stats{display:flex;gap:12px;margin:12px 0}.stat{background:#f8f8f8;border-radius:8px;padding:10px 16px;text-align:center}.stat-val{font-size:22px;font-weight:bold;color:#1a1a5e}.stat-lbl{font-size:10px;color:#666}table{width:100%;border-collapse:collapse;font-size:10px}th{background:#1a1a5e;color:#fff;padding:5px 7px;text-align:left}td{padding:4px 7px;border-bottom:1px solid #eee}.champ{background:#fffbe6;border:1px solid #FFD700;border-radius:8px;padding:10px;display:inline-block;margin:8px 0}</style></head><body>'
+    +'<h1>\u{1F3C6} Quiniela Mundial 2026</h1>'
+    +'<p>Participante: <strong>'+playerName+'</strong> &nbsp;·&nbsp; Quiniela: <strong>'+qName+'</strong> &nbsp;·&nbsp; Posici\u00f3n: <strong>#'+(pos>0?pos:'\u2014')+'</strong></p>'
+    +'<div class="stats"><div class="stat"><div class="stat-val">'+stats.total+'</div><div class="stat-lbl">Puntos</div></div><div class="stat"><div class="stat-val">'+stats.exact+'</div><div class="stat-lbl">\u2705 Exactos</div></div><div class="stat"><div class="stat-val">'+stats.winner+'</div><div class="stat-lbl">\u2714 Ganadores</div></div><div class="stat"><div class="stat-val">'+stats.miss+'</div><div class="stat-lbl">\u274C Fallados</div></div></div>'
+    +'<div class="champ">\u{1F451} Mi campe\u00f3n predicho: <strong>'+champ+'</strong></div>'
+    +'<h2>Fase de Grupos</h2><table><thead><tr><th>ID</th><th>Grupo</th><th>Local</th><th>Visitante</th><th>Mi pred</th><th>Real</th><th>Pts</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    +'<p style="margin-top:20px;color:#999;font-size:9px">Generado por Quiniela Mundial 2026 &middot; '+new Date().toLocaleDateString('es-MX')+'</p>'
+    +'</body></html>';
+  const win=window.open('','_blank');
+  win.document.write(html);win.document.close();win.focus();
+  setTimeout(()=>win.print(),600);
+};
 
 // ===================== EXPORT EXCEL =====================
 // ===================== KO TEAM OVERRIDE =====================
