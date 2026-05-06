@@ -2228,39 +2228,98 @@ window.DEL=n=>{if(confirm(`¿Eliminar a ${n}?`)){const q=S.adminQ?getQ(S.adminQ)
 // ===================== EXPORT EXCEL =====================
 // ===================== KO TEAM OVERRIDE =====================
 window.OPEN_OVERRIDE=function(matchId, currentH, currentA){
-  // Find team lists for autocomplete suggestions
   const allTeams=[...new Set(ALL.map(m=>[m.h,m.a]).flat())].sort();
-  const opts=allTeams.map(t=>`<option value="${t}">`).join('');
+
+  // Build a custom searchable picker that only allows valid teams
+  function pickerHTML(id, label, current){
+    return `
+      <div style="margin-bottom:12px;position:relative;">
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">${label}</label>
+        <div style="position:relative;">
+          <input id="${id}-inp" autocomplete="off" placeholder="Escribe para buscar..."
+            value="${current}"
+            oninput="OVR_FILTER('${id}')"
+            onfocus="OVR_FILTER('${id}')"
+            style="width:100%;padding:9px 12px;border-radius:10px;border:1px solid rgba(255,215,0,0.4);
+                   background:rgba(255,255,255,0.05);color:#fff;font-size:13px;box-sizing:border-box;outline:none;">
+          <div id="${id}-indicator" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:14px;display:none;">✅</div>
+        </div>
+        <div id="${id}-list" style="display:none;position:absolute;left:0;right:0;max-height:160px;overflow-y:auto;
+          background:#1a1a3e;border:1px solid rgba(255,215,0,0.3);border-radius:10px;z-index:99;margin-top:2px;box-shadow:0 8px 24px rgba(0,0,0,0.5);">
+        </div>
+        <input type="hidden" id="${id}-val" value="${current}">
+      </div>`;
+  }
+
   const html=`
-    <div id="ovr-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;">
-      <div style="background:#1a1a3e;border:1px solid rgba(255,215,0,0.3);border-radius:16px;padding:20px;width:100%;max-width:340px;">
+    <div id="ovr-modal" onclick="OVR_CLOSE_DROPDOWNS(event)"
+      style="position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;">
+      <div style="background:#1a1a3e;border:1px solid rgba(255,215,0,0.3);border-radius:16px;padding:20px;width:100%;max-width:340px;" onclick="event.stopPropagation()">
         <div style="font-size:14px;font-weight:800;color:var(--gold);margin-bottom:4px;">✏️ Forzar equipos</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">Partido: <strong>${matchId.toUpperCase()}</strong> — Usa esto si el algoritmo se equivocó en los cruces.</div>
-        <datalist id="teams-dl">${opts}</datalist>
-        <div style="margin-bottom:10px;">
-          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Equipo Local</label>
-          <input id="ovr-h" list="teams-dl" value="${currentH}" placeholder="Nombre del equipo..."
-            style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--card2);color:#fff;font-size:13px;box-sizing:border-box;">
-        </div>
-        <div style="margin-bottom:16px;">
-          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Equipo Visitante</label>
-          <input id="ovr-a" list="teams-dl" value="${currentA}" placeholder="Nombre del equipo..."
-            style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--card2);color:#fff;font-size:13px;box-sizing:border-box;">
-        </div>
-        <div style="display:flex;gap:8px;">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">Partido: <strong>${matchId.toUpperCase()}</strong></div>
+        ${pickerHTML('ovr-h','🏠 Equipo Local',currentH)}
+        ${pickerHTML('ovr-a','✈️ Equipo Visitante',currentA)}
+        <div style="display:flex;gap:8px;margin-top:4px;">
           <button onclick="SAVE_OVERRIDE('${matchId}')" class="btn btn-success" style="flex:1;">💾 Guardar</button>
           <button onclick="CLEAR_OVERRIDE('${matchId}')" class="btn btn-danger" style="flex:1;">🗑️ Quitar</button>
           <button onclick="document.getElementById('ovr-modal').remove()" class="btn btn-secondary">✕</button>
         </div>
       </div>
     </div>`;
+
   document.body.insertAdjacentHTML('beforeend', html);
+
+  // Store teams globally for filter access
+  window._ovrTeams = allTeams;
+
+  // If there's a current value, mark it as selected
+  ['ovr-h','ovr-a'].forEach(id=>{
+    const val = document.getElementById(id+'-val').value;
+    if(val && allTeams.includes(val)){
+      document.getElementById(id+'-indicator').style.display='block';
+    }
+  });
+};
+
+window.OVR_FILTER=function(id){
+  const inp=document.getElementById(id+'-inp');
+  const list=document.getElementById(id+'-list');
+  const val=inp.value.trim().toLowerCase();
+  const teams=window._ovrTeams||[];
+  const matches=val===''?teams:teams.filter(t=>t.toLowerCase().includes(val));
+  if(matches.length===0){list.style.display='none';return;}
+  list.innerHTML=matches.map(t=>`
+    <div onclick="OVR_SELECT('${id}','${t.replace(/'/g,"\'")}');event.stopPropagation()"
+      style="padding:9px 12px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:8px;border-bottom:1px solid rgba(255,255,255,0.05);"
+      onmouseover="this.style.background='rgba(255,215,0,0.12)'"
+      onmouseout="this.style.background='transparent'">
+      <span style="font-size:16px">${F(t)}</span><span>${t}</span>
+    </div>`).join('');
+  list.style.display='block';
+};
+
+window.OVR_SELECT=function(id, team){
+  document.getElementById(id+'-inp').value=team;
+  document.getElementById(id+'-val').value=team;
+  document.getElementById(id+'-list').style.display='none';
+  const ind=document.getElementById(id+'-indicator');
+  ind.style.display='block';
+};
+
+window.OVR_CLOSE_DROPDOWNS=function(e){
+  ['ovr-h','ovr-a'].forEach(id=>{
+    const list=document.getElementById(id+'-list');
+    if(list) list.style.display='none';
+  });
 };
 
 window.SAVE_OVERRIDE=async function(matchId){
-  const h=document.getElementById('ovr-h').value.trim();
-  const a=document.getElementById('ovr-a').value.trim();
-  if(!h||!a){alert('Ingresa ambos equipos');return;}
+  const h=document.getElementById('ovr-h-val').value.trim();
+  const a=document.getElementById('ovr-a-val').value.trim();
+  const teams=window._ovrTeams||[];
+  if(!h||!teams.includes(h)){alert('Selecciona un equipo válido para Local');return;}
+  if(!a||!teams.includes(a)){alert('Selecciona un equipo válido para Visitante');return;}
+  if(h===a){alert('No pueden ser el mismo equipo');return;}
   const R=getResults();
   if(!R.kooverrides) R.kooverrides={};
   R.kooverrides[matchId]={h,a};
