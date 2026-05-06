@@ -1689,7 +1689,8 @@ function buildRanking(){
       ${rank.length===0?`<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px;">Sin participantes guardados</td></tr>`
       :rank.map((u,i)=>`<tr class="${i===0?'top1':i===1?'top2':i===2?'top3':''}">
         <td style="font-size:14px;">${i<3?medals[i]:(i+1)}</td>
-        <td><strong>${u.n}</strong>${i===0&&rank.length>1?' 👑':''}</td>
+        <td><strong style="cursor:pointer;text-decoration:underline dotted;color:var(--gold);"
+            onclick="VIEW_PROFILE('${u.n}','${qName}')">${u.n}</strong>${i===0&&rank.length>1?' 👑':''}</td>
         <td class="pts-big">${u.total}</td>
         <td><span class="bs bs-g">${u.exact}</span></td>
         <td><span class="bs bs-y">${u.winner}</span></td>
@@ -2018,37 +2019,214 @@ function buildInstrucciones(){
   return `<div style="padding:10px;">
     <div class="card">
       <div class="card-title">📋 Cómo jugar</div>
-      <div class="instr-block"><h3>🌍 ¿Qué es?</h3><p>Predice los resultados de los ${TOTAL} partidos de grupos (J1-J3) y toda la fase eliminatoria (dieciseisavos hasta la final) del Mundial 2026.</p></div>
-      <div class="instr-block"><h3>📝 Pasos</h3><ul>
-        <li>Ingresa tu nombre para registrarte</li>
-        <li>Llena los ${TOTAL} partidos de grupos con marcador y resultado</li>
-        <li>Guarda y bloquea tu quiniela de grupos</li>
-        <li>La fase eliminatoria se genera automáticamente según tus predicciones</li>
-        <li>Completa también la fase eliminatoria y bloquéala</li>
-        <li>Deadline: antes del <strong>11 de junio 2026</strong></li>
-      </ul></div>
-      <div class="instr-block"><h3>🏆 Puntuación</h3>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px;">
-          <span class="ibadge ibadge-y">+1 pt — acertar ganador/empate</span>
-          <span class="ibadge ibadge-g">+1 pt extra — marcador exacto = 2 pts</span>
-        </div>
-        <p>Ejemplo: predices <em>México 2-1</em> y sale 2-1 → <strong style="color:var(--green);">2 pts</strong>. Si sale 3-1 → <strong style="color:var(--gold);">1 pt</strong>. Si sale 0-1 → <strong style="color:#ff8a8a;">0 pts</strong>.</p>
+
+      <div class="instr-block"><h3>🌍 ¿Qué es?</h3>
+        <p>Predice los resultados de los ${TOTAL} partidos de grupos y toda la fase eliminatoria del Mundial 2026 — dieciseisavos, octavos, cuartos, semifinales, tercer lugar y la gran final.</p>
       </div>
-      <div class="instr-block"><h3>🎨 Colores en tu quiniela</h3><ul>
-        <li><strong style="color:#69ff6e;">Verde oscuro ✅</strong> — Marcador exacto (+2 pts)</li>
-        <li><strong style="color:var(--gold);">Verde claro ✔</strong> — Solo ganador (+1 pt)</li>
-        <li><strong style="color:#ff8a8a;">Rojo ❌</strong> — Fallido (0 pts)</li>
-        <li><strong style="color:var(--muted);">Sin color</strong> — Aún no jugado</li>
+
+      <div class="instr-block"><h3>📝 Cómo registrarse</h3><ul>
+        <li>En la pantalla de inicio escribe tu <strong>nombre</strong> y selecciona tu <strong>quiniela</strong> (el admin te dice el nombre)</li>
+        <li>Si es la primera vez, se crea tu perfil automáticamente</li>
+        <li>Puedes entrar con el mismo nombre cuantas veces quieras antes de bloquear</li>
       </ul></div>
-      <div class="instr-block"><h3>💰 Premio</h3><p>Cada participante aporta la cantidad acordada. El total va al que más puntos acumule al final. El admin configura el monto.</p></div>
-      <div class="instr-block"><h3>⚠️ Importante</h3><ul>
-        <li>Una vez guardada, no puedes modificar tu quiniela</li>
-        <li>Solo el administrador puede desbloquearte si es necesario</li>
-        <li>Contraseña admin: solo la conoce el organizador</li>
+
+      <div class="instr-block"><h3>⚽ Fase de Grupos</h3><ul>
+        <li>Llena los ${TOTAL} partidos con el marcador que crees que quedará (ej: <em>México 2 - 1 Argentina</em>)</li>
+        <li>Debajo de los partidos verás la <strong>tabla de posiciones hipotética</strong> basada en tus predicciones — los terceros en verde clasifican, los grises no</li>
+        <li>Cuando termines, presiona <strong>🔒 Guardar y bloquear</strong> — ya no podrás modificar grupos</li>
+        <li>Deadline: <strong>antes del 11 de junio 2026</strong></li>
+      </ul></div>
+
+      <div class="instr-block"><h3>🏆 Fase Eliminatoria</h3><ul>
+        <li>Después de bloquear grupos, se genera automáticamente tu bracket de eliminación según tus predicciones</li>
+        <li>Llena cada partido de dieciseisavos hasta la final con tu marcador predicho</li>
+        <li>En empate, además debes indicar quién gana en penales (toca el botón del equipo ganador)</li>
+        <li>Bloquea también la fase eliminatoria cuando termines</li>
+      </ul></div>
+
+      <div class="instr-block"><h3>📊 Ver tablas de grupos</h3>
+        <p>En la sección de <strong>Grupos</strong> encontrarás al final dos tablas de posiciones en paralelo: tus predicciones hipotéticas y los resultados reales conforme el admin los vaya capturando. Los terceros en verde son los que clasifican a dieciseisavos.</p>
+      </div>
+
+      <div class="instr-block"><h3>👥 Ver quiniela de otros participantes</h3>
+        <p>En el <strong>Ranking</strong>, toca el nombre de cualquier participante para ver su quiniela completa — todos los marcadores que predijo, resultados reales y puntos obtenidos. ¡Todo es transparente!</p>
+      </div>
+
+      <div class="instr-block"><h3>🏅 Puntuación</h3>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+          <span class="ibadge ibadge-g">✅ +2 pts — marcador exacto</span>
+          <span class="ibadge ibadge-y">✔ +1 pt — solo acertar ganador o empate</span>
+          <span class="ibadge" style="background:rgba(220,50,50,0.2);color:#ff8a8a;border:1px solid rgba(220,50,50,0.3);padding:4px 8px;border-radius:20px;font-size:10px;">❌ 0 pts — resultado incorrecto</span>
+        </div>
+        <p style="margin:0;">Ejemplo: predices <em>México 2-1</em> → sale 2-1 = <strong style="color:#69ff6e;">+2 pts</strong> · sale 3-1 = <strong style="color:var(--gold);">+1 pt</strong> · sale 0-1 = <strong style="color:#ff8a8a;">0 pts</strong></p>
+        <p style="margin:4px 0 0;font-size:11px;color:var(--muted);">En fase eliminatoria aplican los mismos puntos, pero si el equipo que predijiste no llegó a ese partido = 0 pts automático.</p>
+      </div>
+
+      <div class="instr-block"><h3>🎨 Colores en tu quiniela</h3>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:14px;height:14px;border-radius:3px;background:rgba(0,200,83,0.25);border:1px solid rgba(0,200,83,0.5);flex-shrink:0;"></div>
+            <span style="font-size:11px;"><strong style="color:#69ff6e;">Verde</strong> — Marcador exacto (+2 pts)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:14px;height:14px;border-radius:3px;background:rgba(255,215,0,0.15);border:1px solid rgba(255,215,0,0.4);flex-shrink:0;"></div>
+            <span style="font-size:11px;"><strong style="color:var(--gold);">Dorado</strong> — Solo acertaste el ganador/empate (+1 pt)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:14px;height:14px;border-radius:3px;background:rgba(220,50,50,0.2);border:1px solid rgba(220,50,50,0.4);flex-shrink:0;"></div>
+            <span style="font-size:11px;"><strong style="color:#ff8a8a;">Rojo</strong> — Resultado incorrecto (0 pts)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:14px;height:14px;border-radius:3px;background:var(--card2);border:1px solid var(--border);flex-shrink:0;"></div>
+            <span style="font-size:11px;color:var(--muted);">Sin color — Partido aún no jugado</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="instr-block"><h3>💰 Premio</h3>
+        <p>El total del bote es el número de participantes × la aportación acordada. Se lo lleva quien más puntos acumule al final del torneo (19 de julio 2026).</p>
+      </div>
+
+      <div class="instr-block"><h3>⚠️ Reglas importantes</h3><ul>
+        <li>Una vez que bloqueas tu quiniela <strong>no puedes modificarla</strong></li>
+        <li>Solo el administrador puede desbloquear tu quiniela si hubo un error</li>
+        <li>Los resultados reales los captura el admin — si hay discrepancia, contáctalo</li>
+        <li>La quiniela estará disponible hasta el <strong>19 de julio 2026</strong></li>
       </ul></div>
     </div>
   </div>`;
 }
+
+// ===================== PLAYER PROFILE VIEW =====================
+window.VIEW_PROFILE=function(playerName, qName){
+  const q=getQ(qName); if(!q) return;
+  const u=q.users[playerName]; if(!u) return;
+  const R=getResults();
+  const realRes=R.results||{};
+  const realKO=R.koresults||{};
+  const preds=u.preds||{};
+  const kopreds=u.kopreds||{};
+
+  // Build group match rows
+  function matchRow(m, pred, real){
+    const hasReal=real&&real.h!==''&&real.h!==undefined;
+    const predTxt=pred&&pred.h!==''?`${pred.h}-${pred.a}`:'—';
+    const realTxt=hasReal?`${real.h}-${real.a}`:'—';
+    let res=''; let ptsBadge='';
+    if(hasReal&&pred&&pred.h!==''){
+      const r=matchResult(pred,real);
+      res=r==='exact'?'exact':r==='winner'?'winner':r==='miss'?'miss':'';
+      ptsBadge=r==='exact'?'<span class="mcard-result-badge rb-exact">+2</span>':
+                r==='winner'?'<span class="mcard-result-badge rb-winner">+1</span>':
+                r==='miss'?'<span class="mcard-result-badge rb-miss">0</span>':'';
+    }
+    const rowBg=res==='exact'?'rgba(0,200,83,0.08)':res==='winner'?'rgba(255,215,0,0.06)':res==='miss'?'rgba(220,50,50,0.07)':'';
+    return `<tr style="background:${rowBg};border-bottom:1px solid rgba(255,255,255,0.04);">
+      <td style="padding:5px 6px;font-size:10px;color:var(--muted);">${m.id||m.label}</td>
+      <td style="padding:5px 6px;font-size:10px;">${F(m.h||m.hPos)} ${(m.h||m.hPos||'').slice(0,8)}</td>
+      <td style="padding:5px 6px;font-size:10px;">${F(m.a||m.aPos)} ${(m.a||m.aPos||'').slice(0,8)}</td>
+      <td style="padding:5px 6px;font-size:11px;font-weight:700;text-align:center;">${predTxt}</td>
+      <td style="padding:5px 6px;font-size:11px;text-align:center;color:var(--muted);">${realTxt}</td>
+      <td style="padding:5px 6px;text-align:center;">${ptsBadge}</td>
+    </tr>`;
+  }
+
+  const stats=calcStats(preds,kopreds);
+
+  const groupRows=[[J1,'Jornada 1'],[J2,'Jornada 2'],[J3,'Jornada 3']].map(([jm,jl])=>`
+    <tr><td colspan="6" style="padding:8px 6px 4px;font-size:10px;font-weight:800;color:var(--gold);background:rgba(255,215,0,0.05);">⚽ ${jl}</td></tr>
+    ${jm.map(m=>matchRow(m,preds[m.id],realRes[m.id])).join('')}`).join('');
+
+  const koRows=KO_MATCHES.map(m=>{
+    const pred=kopreds[m.id];
+    const real=realKO[m.id];
+    const hasReal=real&&real.h!==''&&real.h!==undefined;
+    const predTxt=pred&&pred.h!==''?`${pred.h}-${pred.a}`:'—';
+    const realTxt=hasReal?`${real.h}-${real.a}`:'—';
+    const userH=resolveKOTeam(m.hPos,preds,kopreds);
+    const userA=resolveKOTeam(m.aPos,preds,kopreds);
+    let ptsBadge='';
+    if(hasReal&&pred&&pred.h!==''){
+      const realH=resolveKOTeam(m.hPos,realRes,realKO);
+      const realA=resolveKOTeam(m.aPos,realRes,realKO);
+      const ok=(userH===realH&&userA===realA)||(userH===realA&&userA===realH);
+      const r=ok?matchResult(pred,real):'miss';
+      ptsBadge=r==='exact'?'<span class="mcard-result-badge rb-exact">+2</span>':
+                r==='winner'?'<span class="mcard-result-badge rb-winner">+1</span>':
+                r==='miss'?'<span class="mcard-result-badge rb-miss">0</span>':'';
+    }
+    const rowBg=ptsBadge.includes('rb-exact')?'rgba(0,200,83,0.08)':ptsBadge.includes('rb-winner')?'rgba(255,215,0,0.06)':ptsBadge.includes('rb-miss')?'rgba(220,50,50,0.07)':'';
+    return `<tr style="background:${rowBg};border-bottom:1px solid rgba(255,255,255,0.04);">
+      <td style="padding:5px 6px;font-size:10px;color:var(--muted);">${m.label}</td>
+      <td style="padding:5px 6px;font-size:10px;">${F(userH)} ${(userH||'').slice(0,8)}</td>
+      <td style="padding:5px 6px;font-size:10px;">${F(userA)} ${(userA||'').slice(0,8)}</td>
+      <td style="padding:5px 6px;font-size:11px;font-weight:700;text-align:center;">${predTxt}</td>
+      <td style="padding:5px 6px;font-size:11px;text-align:center;color:var(--muted);">${realTxt}</td>
+      <td style="padding:5px 6px;text-align:center;">${ptsBadge}</td>
+    </tr>`;
+  }).join('');
+
+  const thead=`<thead><tr style="border-bottom:1px solid rgba(255,255,255,0.1);">
+    <th style="padding:5px 6px;font-size:9px;color:var(--muted);">Partido</th>
+    <th style="padding:5px 6px;font-size:9px;color:var(--muted);">Local</th>
+    <th style="padding:5px 6px;font-size:9px;color:var(--muted);">Visitante</th>
+    <th style="padding:5px 6px;font-size:9px;color:var(--muted);text-align:center;">Mi pred</th>
+    <th style="padding:5px 6px;font-size:9px;color:var(--muted);text-align:center;">Real</th>
+    <th style="padding:5px 6px;font-size:9px;color:var(--muted);text-align:center;">Pts</th>
+  </tr></thead>`;
+
+  const modal=document.createElement('div');
+  modal.id='profile-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;overflow-y:auto;padding:12px;';
+  modal.innerHTML=`
+    <div style="background:#0d0d30;border:1px solid rgba(255,215,0,0.25);border-radius:16px;max-width:520px;margin:0 auto;overflow:hidden;">
+      <div style="background:linear-gradient(135deg,#162a5e,#0a143a);padding:16px;display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:18px;font-weight:800;color:var(--gold);">${F(playerName)||'👤'} ${playerName}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">Quiniela: ${qName}</div>
+        </div>
+        <button onclick="document.getElementById('profile-modal').remove()"
+          style="background:rgba(255,255,255,0.1);border:none;color:#fff;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer;">✕</button>
+      </div>
+      <div style="display:flex;gap:8px;padding:12px;background:rgba(255,255,255,0.03);border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="flex:1;text-align:center;">
+          <div style="font-size:22px;font-weight:800;color:var(--gold);">${stats.total}</div>
+          <div style="font-size:9px;color:var(--muted);">Puntos</div>
+        </div>
+        <div style="flex:1;text-align:center;">
+          <div style="font-size:18px;font-weight:800;color:#69ff6e;">${stats.exact}</div>
+          <div style="font-size:9px;color:var(--muted);">✅ Exactos</div>
+        </div>
+        <div style="flex:1;text-align:center;">
+          <div style="font-size:18px;font-weight:800;color:var(--gold);">${stats.winner}</div>
+          <div style="font-size:9px;color:var(--muted);">✔ Ganadores</div>
+        </div>
+        <div style="flex:1;text-align:center;">
+          <div style="font-size:18px;font-weight:800;color:#ff8a8a;">${stats.miss}</div>
+          <div style="font-size:9px;color:var(--muted);">❌ Fallados</div>
+        </div>
+        <div style="flex:1;text-align:center;">
+          <div style="font-size:14px;font-weight:700;color:var(--muted);">${u.locked?'🔒':'✏️'}</div>
+          <div style="font-size:9px;color:var(--muted);">${u.locked?'Bloqueado':'En progreso'}</div>
+        </div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;min-width:340px;">
+          ${thead}<tbody>${groupRows}</tbody>
+        </table>
+      </div>
+      ${u.locked?`<div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;min-width:340px;">
+          <thead><tr><td colspan="6" style="padding:8px 6px 4px;font-size:10px;font-weight:800;color:var(--gold);background:rgba(255,215,0,0.05);">🏆 Fase Eliminatoria</td></tr>${thead.replace('<thead>','').replace('</thead>','')}</thead>
+          <tbody>${koRows}</tbody>
+        </table>
+      </div>`:'<div style="padding:12px;font-size:11px;color:var(--muted);text-align:center;">⏳ Fase eliminatoria aún no bloqueada</div>'}
+      <div style="padding:12px;text-align:center;">
+        <button onclick="document.getElementById('profile-modal').remove()" class="btn btn-secondary">Cerrar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+};
 
 // ===================== EVENTS =====================
 window.ST=t=>{S.tab=t;render();const sc=document.getElementById('sc');if(sc)sc.scrollTop=0;};
