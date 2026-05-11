@@ -1313,7 +1313,7 @@ function buildAdminNav(){
 function buildContent(){
   if(S.admin){
     const fab=`<button class="fab-save" id="fab-save-btn" onclick="FAB_SAVE(this)">💾 Guardar resultados</button>`;
-    if(S.tab==='aq') return buildAdminQSelector('aq');
+   if(S.tab==='aq') return buildAdminQSelector('aq');
     if(S.tab==='ar') return buildAdminGroupResults()+fab;
     if(S.tab==='ako') return buildAdminKOResults()+fab;
     if(S.tab==='ark') return S.adminQ?buildRanking():buildRankingAll();
@@ -1342,14 +1342,20 @@ function buildBracket(){
     const t=useReal
       ? resolveKOTeam(pos,realRes,realKO)
       : resolveKOTeam(pos,preds,kopreds);
+  function teamBox(pos, useReal, size){
+    const t=useReal ? resolveKOTeam(pos,realRes,realKO) : resolveKOTeam(pos,preds,kopreds);
     const isPending=!t||t==='?';
     return `<div style="display:flex;align-items:center;gap:5px;padding:4px 7px;background:${isPending?'rgba(255,255,255,0.03)':'rgba(255,255,255,0.06)'};border-radius:6px;min-width:110px;max-width:130px;overflow:hidden;">
       <span style="font-size:13px;flex-shrink:0">${isPending?'❓':F(t)}</span>
       <span style="font-size:9px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${isPending?'var(--muted)':'#fff'}">${isPending?'Por definir':t}</span>
+    return `<div style="display:flex;align-items:center;gap:6px;padding:${size>=3?'6px 8px':'4px 7px'};background:${isPending?'rgba(255,255,255,0.03)':'rgba(255,255,255,0.07)'};border:1px solid rgba(255,255,255,0.08);border-radius:8px;min-width:${size>=3?130:108}px;max-width:${size>=3?170:145}px;overflow:hidden;">
+      <span style="font-size:${size>=3?16:13}px;flex-shrink:0">${isPending?'❓':F(t)}</span>
+      <span style="font-size:${size>=3?10.5:9.5}px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${isPending?'var(--muted)':'#fff'}">${isPending?'Por definir':t}</span>
     </div>`;
   }
 
   function matchBox(m, useReal){
+  function matchBox(m, useReal, size, align){
     const r=useReal?realKO[m.id]:kopreds[m.id];
     const score=r&&r.h!==''?`${r.h}-${r.a}`:'vs';
     return `<div style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;">
@@ -1357,19 +1363,28 @@ function buildBracket(){
       ${teamBox(m.hPos,useReal)}
       <div style="font-size:10px;font-weight:800;color:var(--gold);text-align:center;padding:0 7px;">${score}</div>
       ${teamBox(m.aPos,useReal)}
+    const scoreSize=size===1?10:size===2?12:size===3?14:18;
+    return `<div style="display:flex;flex-direction:column;gap:${size>=3?5:3}px;align-items:${align};width:100%;">
+      <div style="font-size:${size>=3?10:8}px;color:var(--muted);font-weight:700;">${m.label}</div>
+      ${teamBox(m.hPos,useReal,size)}
+      <div style="font-size:${scoreSize}px;font-weight:900;color:var(--gold);padding:0 8px;letter-spacing:0.3px;">${score}</div>
+      ${teamBox(m.aPos,useReal,size)}
     </div>`;
   }
 
   function roundCol(round, useReal){
+  function roundPairs(round){
     const ms=KO_MATCHES.filter(m=>m.round===round);
     return `<div style="display:flex;flex-direction:column;gap:12px;justify-content:space-around;flex:1;">
       <div style="font-size:9px;font-weight:800;color:var(--gold);text-align:center;margin-bottom:4px;">${ROUND_LABELS[round]||round}</div>
       ${ms.map(m=>matchBox(m,useReal)).join('<div style="flex:1;min-height:8px;"></div>')}
     </div>`;
+    return [ms.slice(0,Math.ceil(ms.length/2)), ms.slice(Math.ceil(ms.length/2))];
   }
 
   function buildHalfBracket(useReal){
     const label=useReal?'⚽ Resultados reales':'📋 Mis predicciones';
+  function buildTournament(useReal){
     const hasReal=Object.values(realKO).some(r=>r&&r.h!=='');
     if(useReal&&!hasReal) return `<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">⏳ Aún no hay resultados reales de eliminación</div>`;
     return `<div style="margin-bottom:6px;font-size:11px;font-weight:800;color:${useReal?'#7aadff':'var(--gold)'};padding:0 4px;">${label}</div>
@@ -1380,6 +1395,41 @@ function buildBracket(){
         ${matchBox(KO_MATCHES.find(m=>m.round==='FIN'),useReal)}
         <div style="font-size:9px;font-weight:800;color:var(--muted);text-align:center;margin-top:4px;">3° Lugar</div>
         ${matchBox(KO_MATCHES.find(m=>m.round==='3P'),useReal)}
+
+    const [d16L,d16R]=roundPairs('D16');
+    const [r16L,r16R]=roundPairs('R16');
+    const [qfL,qfR]=roundPairs('QF');
+    const [sfL,sfR]=roundPairs('SF');
+    const fin=KO_MATCHES.find(m=>m.round==='FIN');
+    const third=KO_MATCHES.find(m=>m.round==='3P');
+
+    const col=(title,matches,size,align)=>`<div style="display:flex;flex-direction:column;justify-content:space-around;gap:${size===1?10:size===2?18:size===3?26:20}px;align-items:${align};">
+      <div style="font-size:${size===1?9:size===2?10:11}px;font-weight:800;color:var(--gold);text-align:center;">${title}</div>
+      ${matches.map(m=>matchBox(m,useReal,size,align)).join('')}
+    </div>`;
+
+    return `<div style="overflow-x:auto;padding-bottom:6px;">
+      <div style="min-width:1220px;display:flex;align-items:center;justify-content:center;gap:14px;">
+        ${col('Dieciseisavos',d16L,1,'flex-end')}
+        ${col('Octavos',r16L,2,'flex-end')}
+        ${col('Cuartos',qfL,3,'flex-end')}
+        ${col('Semifinal',sfL,4,'flex-end')}
+
+        <div style="display:flex;flex-direction:column;align-items:center;gap:12px;min-width:230px;">
+          <div style="font-size:12px;font-weight:900;color:var(--gold);letter-spacing:.4px;">🏆 GRAN FINAL</div>
+          <div style="background:linear-gradient(135deg,rgba(255,215,0,0.12),rgba(255,215,0,0.03));border:1px solid rgba(255,215,0,0.35);border-radius:14px;padding:10px;box-shadow:0 0 18px rgba(255,215,0,0.16);width:100%;display:flex;justify-content:center;">
+            ${matchBox(fin,useReal,4,'center')}
+          </div>
+          <div style="font-size:10px;font-weight:700;color:var(--muted);">🥉 Tercer lugar</div>
+          <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:8px;display:flex;justify-content:center;width:100%;">
+            ${matchBox(third,useReal,2,'center')}
+          </div>
+        </div>
+
+        ${col('Semifinal',sfR,4,'flex-start')}
+        ${col('Cuartos',qfR,3,'flex-start')}
+        ${col('Octavos',r16R,2,'flex-start')}
+        ${col('Dieciseisavos',d16R,1,'flex-start')}
       </div>
     </div>`;
   }
@@ -1390,10 +1440,12 @@ function buildBracket(){
     <div class="card" style="margin-bottom:10px;">
       <div class="card-title">🌳 Bracket — Mis predicciones</div>
       ${buildHalfBracket(false)}
+      ${buildTournament(false)}
     </div>
     <div class="card">
       <div class="card-title">🌳 Bracket — Resultados reales</div>
       ${buildHalfBracket(true)}
+      ${buildTournament(true)}
     </div>
   </div>`;
 }
