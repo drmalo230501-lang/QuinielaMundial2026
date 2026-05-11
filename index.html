@@ -1337,155 +1337,229 @@ function buildBracket(){
   const R=getResults();
   const realKO=R.koresults||{};
   const realRes=R.results||{};
+  if(!user||!user.locked) return `<div style="padding:30px;text-align:center;color:var(--muted);">🔒 Bloquea tu quiniela de grupos para ver el bracket</div>`;
 
-  if(!user||!user.locked) return `<div style="padding:20px;text-align:center;color:var(--muted);">🔒 Bloquea tu quiniela de grupos para ver el bracket</div>`;
+  const hasReal=Object.values(realKO).some(r=>r&&r.h!=='');
 
-  function getWinnerOf(m, kp){
-    if(!kp||kp.h===''||kp.h===undefined) return null;
-    const rh=parseInt(kp.h), ra=parseInt(kp.a);
-    if(isNaN(rh)||isNaN(ra)) return null;
-    if(rh===ra) return null;
-    const ht=resolveKOTeam(m.hPos,preds,kopreds);
-    const at=resolveKOTeam(m.aPos,preds,kopreds);
-    return rh>ra?ht:at;
-  }
+  function renderBracket(useReal){
+    const kp=useReal?realKO:kopreds;
+    const gp=useReal?realRes:preds;
 
-  function matchCard(m, kp, size='sm', useReal=false){
-    const srcPreds = useReal ? realRes : preds;
-    const srcKO    = useReal ? realKO  : kopreds;
-    const ht = resolveKOTeam(m.hPos, srcPreds, srcKO);
-    const at = resolveKOTeam(m.aPos, srcPreds, srcKO);
-    const sh = kp&&kp.h!==''?kp.h:'';
-    const sa = kp&&kp.a!==''?kp.a:'';
-    const rh = sh!==''?parseInt(sh):NaN;
-    const ra = sa!==''?parseInt(sa):NaN;
-    const winner = !isNaN(rh)&&!isNaN(ra)&&rh!==ra ? (rh>ra?ht:at) : null;
-    const isFinal = size==='lg';
-    const isThird = size==='xs';
-    const tbd = '❓';
+    function team(pos){
+      const t=resolveKOTeam(pos,gp,kp);
+      return t&&t!=='?'?t:null;
+    }
+    function score(mid){
+      const r=kp[mid];
+      return r&&r.h!==''?r.h+'-'+r.a:null;
+    }
 
-    const rowH=`<div class="br-team-row${winner===ht?' br-winner':''}">
-      <span class="br-flag">${ht&&ht!=='?'?F(ht):tbd}</span>
-      <span class="br-name ${!ht||ht==='?'?'br-tbd':''}">${ht&&ht!=='?'?ht:'Por definir'}</span>
-      <span class="br-score">${sh}</span>
-    </div>`;
-    const rowA=`<div class="br-team-row${winner===at?' br-winner':''}">
-      <span class="br-flag">${at&&at!=='?'?F(at):tbd}</span>
-      <span class="br-name ${!at||at==='?'?'br-tbd':''}">${at&&at!=='?'?at:'Por definir'}</span>
-      <span class="br-score">${sa}</span>
-    </div>`;
+    // Layout: left side D16 (8 matches split into pathway 1+2), right side mirror
+    // KO_MATCHES order from the bracket image:
+    // PATHWAY 1 LEFT: p74,p77,p73,p75  → QF: p89,p90 → SF: p97
+    // PATHWAY 2 LEFT: p83,p84,p81,p82  → QF: p93,p94 → SF: p98
+    // PATHWAY 1 RIGHT: p76,p78,p91,p92 → QF mirror
+    // PATHWAY 2 RIGHT: p86,p88,p85,p87 → QF mirror
+    // Final: p104, Bronze: p103
 
-    const lbl = isFinal
-      ? `<div class="br-match-lbl br-final-lbl">⭐ GRAN FINAL · 19 JUL · Nueva York</div>`
-      : isThird
-        ? `<div class="br-match-lbl">🥉 3er Lugar · ${m.d} · ${m.v}</div>`
-        : `<div class="br-match-lbl">${m.label} · ${m.d}</div>`;
+    // Build a match card
+    function mc(mid, big=false, flip=false){
+      const m=KO_MATCHES.find(x=>x.id===mid);
+      if(!m) return '';
+      const th=team(m.hPos), ta=team(m.aPos);
+      const sc=score(mid);
+      const fw=big?700:600; const fs=big?11:9.5; const flag=big?16:13;
+      const minH=big?52:44;
 
-    const cls = isFinal ? 'br-match br-match-final' : isThird ? 'br-match br-match-third' : 'br-match';
-    return `<div class="${cls}">${lbl}${rowH}${rowA}</div>`;
-  }
+      function teamRow(t, isWinner){
+        const dim=!sc&&!t;
+        return `<div style="display:flex;align-items:center;gap:4px;padding:${big?5:4}px ${big?8:6}px;
+          background:${isWinner?'rgba(255,215,0,0.15)':'transparent'};
+          border-radius:5px;min-height:${big?22:18}px;">
+          <span style="font-size:${flag}px;flex-shrink:0;width:${flag+2}px;text-align:center">${dim?'❓':(t?F(t):'❓')}</span>
+          <span style="font-size:${fs}px;font-weight:${isWinner?800:600};
+            color:${dim?'rgba(255,255,255,0.25)':isWinner?'var(--gold)':'#fff'};
+            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${big?90:72}px;">
+            ${t||'Por definir'}</span>
+          ${sc?`<span style="margin-left:auto;font-size:${big?13:11}px;font-weight:800;
+            color:${isWinner?'var(--gold)':'rgba(255,255,255,0.5)'};flex-shrink:0;">${isWinner?sc.split('-')[flip?1:0]:sc.split('-')[flip?0:1]}</span>`:''}
+        </div>`;
+      }
 
-  function buildHalf(rounds, side, useReal){
-    const labels={D16:'Dieciseisavos',R16:'Octavos',QF:'Cuartos de Final',SF:'Semis'};
-    let cols = rounds.map(({round, matches})=>{
-      const cards = matches.map(m=>{
-        const kp = useReal ? realKO[m.id] : kopreds[m.id];
-        return matchCard(m, kp||{h:'',a:''}, 'sm', useReal);
-      }).join('');
-      return `<div class="br-col" data-round="${round}">
-        <div class="br-round-label">${labels[round]||round}</div>
-        <div class="br-col-matches">${cards}</div>
+      const rh=sc?parseInt(sc.split('-')[0]):null, ra=sc?parseInt(sc.split('-')[1]):null;
+      const hWins=rh!==null&&rh>ra, aWins=ra!==null&&ra>rh;
+
+      return `<div style="background:rgba(255,255,255,0.05);border:1px solid ${sc?'rgba(255,215,0,0.3)':'rgba(255,255,255,0.1)'};
+        border-radius:8px;overflow:hidden;min-height:${minH}px;width:${big?130:112}px;flex-shrink:0;">
+        <div style="font-size:8px;color:var(--muted);padding:2px 6px;background:rgba(0,0,0,0.2);
+          border-bottom:1px solid rgba(255,255,255,0.06);">${m.label}</div>
+        ${teamRow(th, hWins)}
+        <div style="height:1px;background:rgba(255,255,255,0.07);margin:0 4px;"></div>
+        ${teamRow(ta, aWins)}
       </div>`;
-    });
-    if(side==='right') cols = cols.reverse();
-    return `<div class="br-half br-half-${side}">${cols.join('')}</div>`;
-  }
+    }
 
-  function buildFullBracket(useReal){
-    const finM = KO_MATCHES.find(m=>m.round==='FIN');
-    const trdM = KO_MATCHES.find(m=>m.round==='3P');
-    const finKP = useReal ? realKO[finM.id] : kopreds[finM.id];
-    const trdKP = useReal ? realKO[trdM.id] : kopreds[trdM.id];
+    // Connector line between matches
+    function line(vert=false){
+      return vert
+        ? `<div style="width:12px;flex-shrink:0;border-top:1px solid rgba(255,215,0,0.2);align-self:center;"></div>`
+        : `<div style="width:1px;background:rgba(255,215,0,0.2);align-self:stretch;flex-shrink:0;"></div>`;
+    }
 
-    // Left half: P73,P76,P79,P82 (D16) → P89,P91 (R16) → P97 (QF) → P101 (SF)
-    const leftRounds=[
-      {round:'D16', matches:KO_MATCHES.filter(m=>m.round==='D16').slice(0,8)},
-      {round:'R16', matches:KO_MATCHES.filter(m=>m.round==='R16').slice(0,4)},
-      {round:'QF',  matches:KO_MATCHES.filter(m=>m.round==='QF').slice(0,2)},
-      {round:'SF',  matches:KO_MATCHES.filter(m=>m.round==='SF').slice(0,1)},
-    ];
-    // Right half
-    const rightRounds=[
-      {round:'D16', matches:KO_MATCHES.filter(m=>m.round==='D16').slice(8,16)},
-      {round:'R16', matches:KO_MATCHES.filter(m=>m.round==='R16').slice(4,8)},
-      {round:'QF',  matches:KO_MATCHES.filter(m=>m.round==='QF').slice(2,4)},
-      {round:'SF',  matches:KO_MATCHES.filter(m=>m.round==='SF').slice(1,2)},
-    ];
+    // A column of matches with vertical connectors
+    function col(mids, big=false){
+      return `<div style="display:flex;flex-direction:column;gap:0;justify-content:space-around;align-items:center;">
+        ${mids.map((mid,i)=>`
+          ${i>0?`<div style="flex:1;min-height:${big?20:12}px;"></div>`:''}
+          ${mc(mid,big)}
+        `).join('')}
+      </div>`;
+    }
 
-    const hasReal=useReal&&Object.values(realKO).some(r=>r&&r.h!=='');
-    if(useReal&&!hasReal) return `<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">⏳ Aún no hay resultados reales de eliminación</div>`;
+    // PATHWAY 1 (top half): p74,p77,p73,p75 → p89,p90 → p97 → p101/p104
+    // PATHWAY 2 (bottom half): p83,p84,p81,p82 → p93,p94 → p98
+    // RIGHT PATHWAY 1: p76,p78 → p91 → p99 → p102/p104
+    // RIGHT PATHWAY 2: p86,p88,p85,p87 → p95,p96 → p100
 
-    return `<div class="br-scroll">
-      <div class="br-root">
-        ${buildHalf(leftRounds,'left',useReal)}
-        <div class="br-center-col">
-          <div class="br-round-label" style="color:#FFD700;">Final</div>
-          <div style="font-size:28px;text-align:center;margin:4px 0;">🏆</div>
-          ${matchCard(finM, finKP||{h:'',a:''}, 'lg', useReal)}
-          <div style="margin-top:10px;width:100%;">
-            ${matchCard(trdM, trdKP||{h:'',a:''}, 'xs', useReal)}
-          </div>
+    const leftD16a=['p74','p77','p73','p75'];
+    const leftD16b=['p83','p84','p81','p82'];
+    const leftR16a=['p89','p90'];
+    const leftR16b=['p93','p94'];
+    const leftQFa='p97'; const leftQFb='p98';
+    const leftSF='p101';
+
+    const rightD16a=['p76','p78','p91','p92'];
+    const rightD16b=['p86','p88','p85','p87'];
+    const rightR16a=['p99','p100']; // Note: actual match ids from KO_MATCHES
+    const rightQFa='p102';
+    const rightSF='p102'; // placeholder - depends on actual structure
+
+    // Actually just use actual KO match order from the data
+    const d16=KO_MATCHES.filter(m=>m.round==='D16').map(m=>m.id);
+    const r16=KO_MATCHES.filter(m=>m.round==='R16').map(m=>m.id);
+    const qf=KO_MATCHES.filter(m=>m.round==='QF').map(m=>m.id);
+    const sf=KO_MATCHES.filter(m=>m.round==='SF').map(m=>m.id);
+    const fin=KO_MATCHES.find(m=>m.round==='FIN');
+    const bronze=KO_MATCHES.find(m=>m.round==='3P');
+
+    // Split: first half left, second half right (mirror)
+    const d16L=d16.slice(0,8), d16R=[...d16.slice(8)].reverse();
+    const r16L=r16.slice(0,4), r16R=[...r16.slice(4)].reverse();
+    const qfL=qf.slice(0,2), qfR=[...qf.slice(2)].reverse();
+    const sfL=sf[0], sfR=sf[1];
+
+    const bracketId='bracket-'+(useReal?'real':'pred');
+
+    return `<div id="${bracketId}" style="overflow-x:auto;-webkit-overflow-scrolling:touch;padding:8px 0 16px;">
+      <div style="display:inline-flex;align-items:center;gap:0;min-width:700px;padding:0 8px;">
+
+        <!-- LEFT: D16 -->
+        <div style="display:flex;flex-direction:column;gap:6px;justify-content:space-around;">
+          ${d16L.map(id=>mc(id)).join('<div style="height:6px"></div>')}
         </div>
-        ${buildHalf(rightRounds,'right',useReal)}
+
+        <!-- connector -->
+        <div style="display:flex;flex-direction:column;justify-content:space-around;gap:0;align-self:stretch;width:14px;">
+          ${d16L.map((_,i)=>`<div style="flex:1;border-right:1px solid rgba(255,215,0,0.2);${i%2===0?'border-bottom':'border-top'}:1px solid rgba(255,215,0,0.2);border-radius:${i%2===0?'0 0 4px 0':'0 4px 0 0'};"></div>`).join('')}
+        </div>
+
+        <!-- LEFT: R16 -->
+        <div style="display:flex;flex-direction:column;gap:0;justify-content:space-around;align-self:stretch;">
+          ${r16L.map((id,i)=>`<div style="flex:1;display:flex;align-items:center;">${mc(id)}</div>`).join('')}
+        </div>
+
+        <!-- connector -->
+        <div style="display:flex;flex-direction:column;justify-content:space-around;gap:0;align-self:stretch;width:14px;">
+          ${r16L.map((_,i)=>`<div style="flex:1;border-right:1px solid rgba(255,215,0,0.2);${i%2===0?'border-bottom':'border-top'}:1px solid rgba(255,215,0,0.2);border-radius:${i%2===0?'0 0 4px 0':'0 4px 0 0'};"></div>`).join('')}
+        </div>
+
+        <!-- LEFT: QF -->
+        <div style="display:flex;flex-direction:column;gap:0;justify-content:space-around;align-self:stretch;">
+          ${qfL.map((id,i)=>`<div style="flex:1;display:flex;align-items:center;">${mc(id,true)}</div>`).join('')}
+        </div>
+
+        <!-- connector -->
+        <div style="display:flex;flex-direction:column;justify-content:space-around;gap:0;align-self:stretch;width:14px;">
+          ${qfL.map((_,i)=>`<div style="flex:1;border-right:1px solid rgba(255,215,0,0.2);${i%2===0?'border-bottom':'border-top'}:1px solid rgba(255,215,0,0.2);border-radius:${i%2===0?'0 0 4px 0':'0 4px 0 0'};"></div>`).join('')}
+        </div>
+
+        <!-- LEFT: SF -->
+        <div style="display:flex;align-items:center;flex:0 0 auto;">
+          ${mc(sfL,true)}
+        </div>
+        <div style="width:14px;align-self:center;border-top:1px solid rgba(255,215,0,0.2);"></div>
+
+        <!-- CENTER: FINAL + BRONZE -->
+        <div style="display:flex;flex-direction:column;align-items:center;gap:10px;flex:0 0 auto;">
+          <div style="font-size:9px;color:var(--gold);font-weight:800;text-align:center;margin-bottom:2px;">🏆 FINAL</div>
+          ${mc(fin?fin.id:'',true)}
+          <div style="font-size:8px;color:var(--muted);text-align:center;margin-top:4px;">🥉 3er Lugar</div>
+          ${mc(bronze?bronze.id:'',false)}
+        </div>
+
+        <!-- RIGHT: SF -->
+        <div style="width:14px;align-self:center;border-top:1px solid rgba(255,215,0,0.2);"></div>
+        <div style="display:flex;align-items:center;flex:0 0 auto;">
+          ${mc(sfR,true)}
+        </div>
+
+        <!-- connector -->
+        <div style="display:flex;flex-direction:column;justify-content:space-around;gap:0;align-self:stretch;width:14px;">
+          ${qfR.map((_,i)=>`<div style="flex:1;border-left:1px solid rgba(255,215,0,0.2);${i%2===0?'border-bottom':'border-top'}:1px solid rgba(255,215,0,0.2);border-radius:${i%2===0?'4px 0 0 0':'4px 0 0 0'};"></div>`).join('')}
+        </div>
+
+        <!-- RIGHT: QF -->
+        <div style="display:flex;flex-direction:column;gap:0;justify-content:space-around;align-self:stretch;">
+          ${qfR.map((id,i)=>`<div style="flex:1;display:flex;align-items:center;">${mc(id,true)}</div>`).join('')}
+        </div>
+
+        <!-- connector -->
+        <div style="display:flex;flex-direction:column;justify-content:space-around;gap:0;align-self:stretch;width:14px;">
+          ${r16R.map((_,i)=>`<div style="flex:1;border-left:1px solid rgba(255,215,0,0.2);${i%2===0?'border-bottom':'border-top'}:1px solid rgba(255,215,0,0.2);border-radius:${i%2===0?'4px 0 0 0':'4px 0 0 0'};"></div>`).join('')}
+        </div>
+
+        <!-- RIGHT: R16 -->
+        <div style="display:flex;flex-direction:column;gap:0;justify-content:space-around;align-self:stretch;">
+          ${r16R.map((id,i)=>`<div style="flex:1;display:flex;align-items:center;">${mc(id)}</div>`).join('')}
+        </div>
+
+        <!-- connector -->
+        <div style="display:flex;flex-direction:column;justify-content:space-around;gap:0;align-self:stretch;width:14px;">
+          ${d16R.map((_,i)=>`<div style="flex:1;border-left:1px solid rgba(255,215,0,0.2);${i%2===0?'border-bottom':'border-top'}:1px solid rgba(255,215,0,0.2);border-radius:${i%2===0?'4px 0 0 0':'4px 0 0 0'};"></div>`).join('')}
+        </div>
+
+        <!-- RIGHT: D16 -->
+        <div style="display:flex;flex-direction:column;gap:6px;justify-content:space-around;">
+          ${d16R.map(id=>mc(id)).join('<div style="height:6px"></div>')}
+        </div>
+
       </div>
     </div>`;
   }
 
-  return `
-  <style>
-    .br-scroll{overflow-x:auto;width:100%;padding:10px 0 6px;}
-    .br-root{display:flex;align-items:stretch;min-width:820px;gap:0;}
-    .br-half{display:flex;flex:3;min-width:0;align-items:stretch;}
-    .br-half-right{flex-direction:row-reverse;}
-    .br-col{display:flex;flex-direction:column;justify-content:space-around;flex:1;min-width:0;padding:0 2px;}
-    .br-round-label{text-align:center;font-size:8px;font-weight:700;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.5px;padding-bottom:5px;}
-    .br-col-matches{display:flex;flex-direction:column;justify-content:space-around;flex:1;gap:4px;}
-    .br-center-col{flex:1.4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 6px;}
-    .br-match{background:#181860;border:1px solid rgba(255,255,255,0.1);border-radius:8px;overflow:hidden;margin:2px 0;}
-    .br-match:hover{border-color:rgba(255,215,0,0.4);}
-    .br-match-final{border:2px solid rgba(255,215,0,0.6)!important;box-shadow:0 0 12px rgba(255,215,0,0.15);width:100%;}
-    .br-match-third{border-color:rgba(180,130,0,0.3)!important;width:90%;margin:0 auto;}
-    .br-match-lbl{font-size:7.5px;color:rgba(255,255,255,0.4);padding:2px 6px;background:rgba(0,0,0,0.2);border-bottom:1px solid rgba(255,255,255,0.06);letter-spacing:0.3px;}
-    .br-final-lbl{font-size:9px;color:#FFD700;background:rgba(255,215,0,0.1);padding:3px 6px;text-align:center;letter-spacing:0.5px;}
-    .br-team-row{display:flex;align-items:center;gap:4px;padding:3px 6px;min-height:24px;border-bottom:1px solid rgba(255,255,255,0.05);}
-    .br-match-final .br-team-row{padding:5px 9px;min-height:30px;}
-    .br-team-row:last-of-type{border-bottom:none;}
-    .br-winner{background:rgba(0,200,83,0.12);}
-    .br-winner .br-name{color:#FFD700;font-weight:700;}
-    .br-winner .br-score{color:#FFD700;}
-    .br-flag{font-size:12px;flex-shrink:0;}
-    .br-match-final .br-flag{font-size:16px;}
-    .br-name{flex:1;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:rgba(255,255,255,0.85);}
-    .br-match-final .br-name{font-size:11px;}
-    .br-score{font-size:10px;font-weight:700;color:rgba(255,255,255,0.5);min-width:12px;text-align:center;}
-    .br-tbd{color:rgba(255,255,255,0.3);font-style:italic;}
-    /* Bracket connectors */
-    .br-half-left .br-col:not(:last-child) .br-match:nth-child(odd){border-right:2px solid rgba(255,255,255,0.12);border-bottom-right-radius:0;}
-    .br-half-left .br-col:not(:last-child) .br-match:nth-child(even){border-right:2px solid rgba(255,255,255,0.12);border-top-right-radius:0;}
-    .br-half-right .br-col:not(:last-child) .br-match:nth-child(odd){border-left:2px solid rgba(255,255,255,0.12);border-bottom-left-radius:0;}
-    .br-half-right .br-col:not(:last-child) .br-match:nth-child(even){border-left:2px solid rgba(255,255,255,0.12);border-top-left-radius:0;}
-  </style>
-  <div style="padding:10px 0 0;">
-    <div class="card" style="margin:0 10px 10px;">
-      <div class="card-title">📋 Mis predicciones</div>
-      ${buildFullBracket(false)}
+  // Tab switcher: mis predicciones / resultados reales
+  const tab=S._bracketTab||'pred';
+
+  return `<div style="padding:10px;">
+    <div style="display:flex;border-radius:10px;overflow:hidden;border:1px solid var(--border);margin-bottom:10px;">
+      <button onclick="S._bracketTab='pred';render()" style="flex:1;padding:10px;border:none;cursor:pointer;font-size:12px;font-weight:700;
+        background:${tab==='pred'?'var(--gold)':'rgba(255,255,255,0.05)'};
+        color:${tab==='pred'?'#000':'var(--muted)'};">📋 Mis predicciones</button>
+      <button onclick="S._bracketTab='real';render()" style="flex:1;padding:10px;border:none;cursor:pointer;font-size:12px;font-weight:700;
+        background:${tab==='real'?'#7aadff':'rgba(255,255,255,0.05)'};
+        color:${tab==='real'?'#000':'var(--muted)'};">⚽ Resultados reales</button>
     </div>
-    <div class="card" style="margin:0 10px 10px;">
-      <div class="card-title">⚽ Resultados reales</div>
-      ${buildFullBracket(true)}
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;">
+      <div style="padding:8px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);">
+        ← Desliza para ver el bracket completo →
+      </div>
+      ${tab==='real'&&!Object.values(realKO).some(r=>r&&r.h!=='')
+        ?`<div style="padding:30px;text-align:center;color:var(--muted);font-size:12px;">⏳ Aún no hay resultados reales de eliminación</div>`
+        :renderBracket(tab==='real')}
     </div>
   </div>`;
 }
+
 
 // ===================== LOGIN =====================
 function buildLogin(){
