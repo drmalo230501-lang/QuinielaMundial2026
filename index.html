@@ -484,6 +484,7 @@ async function load(){
       if(raw){
         const saved = JSON.parse(raw);
         S.quinielas = saved.quinielas || {};
+        S.coadmins = saved.coadmins || {};
       }
     }
   }catch(e){ console.error('Error cargando datos:',e); }
@@ -496,7 +497,7 @@ async function save(){
     if(_saveTimer) clearTimeout(_saveTimer);
     _saveTimer=setTimeout(async()=>{
       try{
-        const json = JSON.stringify({quinielas: S.quinielas});
+        const json = JSON.stringify({quinielas: S.quinielas, coadmins: S.coadmins||{}});
         await _db.collection('quinielas').doc(SK).set({json});
       }catch(e){ console.error('Error guardando datos:',e); }
       resolve();
@@ -507,7 +508,7 @@ async function save(){
 async function saveNow(){
   if(_saveTimer){clearTimeout(_saveTimer);_saveTimer=null;}
   try{
-    const json = JSON.stringify({quinielas: S.quinielas});
+    const json = JSON.stringify({quinielas: S.quinielas, coadmins: S.coadmins||{}});
     await _db.collection('quinielas').doc(SK).set({json});
   }catch(e){ console.error('Error guardando datos:',e); }
 }
@@ -518,8 +519,9 @@ function curQ(){ return S.cur?getQ(S.cur.quinielaName):null; }
 function curUser(){ const q=curQ(); return q&&S.cur?q.users[S.cur.name]:null; }
 // Global results (shared across all quinielas, keyed by match id)
 function getResults(){ 
-  // results are stored in a special "__results__" quiniela slot
   if(!S.quinielas['__results__']) S.quinielas['__results__']={results:{},koresults:{}};
+  // Clean up __coadmins__ if it accidentally ended up in quinielas
+  delete S.quinielas['__coadmins__'];
   return S.quinielas['__results__'];
 }
 
@@ -1299,15 +1301,21 @@ function buildUserNav(){
   return `<nav class="bnav">${tabs.map(t=>`<button class="bnav-btn ${S.tab===t.id?'active':''}" onclick="${t.id==='salir'?'LO()':'ST(\''+t.id+'\')'}" ><span class="icon">${t.icon}</span><span class="bnav-label">${t.label}</span></button>`).join('')}</nav>`;
 }
 function buildAdminNav(){
-  const tabs=[
+  const tabs=S.isCoadmin?[
     {id:'aq',icon:'📋',label:'Quinielas'},
     {id:'ar',icon:'📝',label:'Resultados'},
     {id:'ako',icon:'🏆',label:'Elim.'},
     {id:'ark',icon:'🏅',label:'Ranking'},
-    {id:'au',icon:'👥',label:'Usuarios'},
+    {id:'salir',icon:'🚪',label:'Salir'},
+  ]:[
+    {id:'aq',icon:'📋',label:'Quinielas'},
+    {id:'ar',icon:'📝',label:'Resultados'},
+    {id:'ako',icon:'🏆',label:'Elim.'},
+    {id:'ark',icon:'🏅',label:'Ranking'},
+    {id:'aca',icon:'🔑',label:'Co-admins'},
     {id:'salir',icon:'🚪',label:'Salir'},
   ];
-  return `<nav class="bnav">${tabs.map(t=>`<button class="bnav-btn ${S.tab===t.id?'active':''}" onclick="${t.id==='salir'?'LO()':'ST(\''+t.id+'\')'}" ><span class="icon">${t.icon}</span><span class="bnav-label">${t.label}</span></button>`).join('')}</nav>`;
+  return `<nav class="bnav">${tabs.map(t=>`<button class="bnav-btn ${S.tab===t.id?'active':''}" onclick="${t.id==='salir'?'LO()':'ST(\''+t.id+'\')'}"><span class="icon">${t.icon}</span><span class="bnav-label">${t.label}</span></button>`).join('')}</nav>`;
 }
 
 function buildContent(){
@@ -1317,7 +1325,7 @@ function buildContent(){
     if(S.tab==='ar') return buildAdminGroupResults()+fab;
     if(S.tab==='ako') return buildAdminKOResults()+fab;
     if(S.tab==='ark') return S.adminQ?buildRanking():buildRankingAll();
-    if(S.tab==='au') return buildAdminUsers();
+    if(S.tab==='aca') return buildCoAdminPage();
     return buildAdminQSelector('aq');
   }
   if(S.tab==='grupos') return buildGrupos();
@@ -1563,7 +1571,7 @@ function buildBracket(){
 
 // ===================== LOGIN =====================
 function buildLogin(){
-  const qNames=Object.keys(S.quinielas).filter(k=>k!=='__results__');
+  const qNames=Object.keys(S.quinielas).filter(k=>k!=='__results__'&&k!=='__coadmins__');
   const qOptions=qNames.map(q=>`<option value="${q}">${q}</option>`).join('');
   return `<div class="header"><span class="trophy">🏆</span><h1>Quiniela Mundial 2026</h1><p>🇺🇸 USA · 🇲🇽 México · 🇨🇦 Canadá</p></div>
   <div style="padding:10px;">
@@ -2071,7 +2079,7 @@ function buildPointsChart(qName){
 }
 
 function buildRankingAll(){
-  const qNames=Object.keys(S.quinielas).filter(k=>k!=='__results__');
+  const qNames=Object.keys(S.quinielas).filter(k=>k!=='__results__'&&k!=='__coadmins__');
   if(!qNames.length) return '<div style="padding:20px;color:var(--muted);text-align:center;">Sin quinielas creadas.</div>';
   return qNames.map(qn=>{
     const q=getQ(qn);
@@ -2287,33 +2295,60 @@ function buildAdminQBanner(qName){
 }
 
 function buildAdminQSelector(activeTab){
-  const qNames=Object.keys(S.quinielas).filter(k=>k!=='__results__');
+  const qNames=Object.keys(S.quinielas).filter(k=>k!=='__results__'&&k!=='__coadmins__');
+
+  function buildUsersInline(qn){
+    const q=getQ(qn); if(!q) return '';
+    const us=Object.entries(q.users||{});
+    return `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="font-size:12px;font-weight:700;color:var(--gold);">👥 Participantes (${us.length})</div>
+        <button class="btn btn-primary btn-sm" onclick="EXPORT_EXCEL('${qn}')">📥 Excel</button>
+      </div>
+      ${us.length===0?'<p style="color:var(--muted);font-size:11px;text-align:center;padding:8px;">Sin participantes</p>':
+        us.map(([n,u])=>{
+          const stats=calcStats(u.preds||{},u.kopreds||{});
+          return `<div style="display:flex;align-items:center;gap:7px;padding:7px 8px;background:rgba(255,255,255,0.03);border-radius:8px;margin-bottom:5px;border:1px solid rgba(255,255,255,0.07);">
+            <span style="font-size:16px;">${u.locked?'🔒':'✏️'}</span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:12px;font-weight:700;">${n}</div>
+              <div style="font-size:9px;color:var(--muted);">${u.locked?stats.total+'pts · '+stats.exact+'✅ '+stats.winner+'✔':Object.values(u.preds||{}).filter(p=>p&&p.h!=='').length+'/'+TOTAL+' capturados'}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:3px;">
+              ${u.locked?`<button class="btn btn-secondary btn-sm" onclick="UU('${n}')">🔓</button>`:''}
+              <button class="btn btn-success btn-sm" onclick="OPEN_EDIT('${n}')">✏️</button>
+              <button class="btn btn-danger btn-sm" onclick="DEL('${n}')">🗑️</button>
+            </div>
+          </div>`;}).join('')}
+    </div>`;
+  }
+
   return `<div style="padding:10px;">
-    <div class="card">
-      <div class="card-title">🏆 Gestionar Quinielas</div>
-      ${qNames.map(qn=>{
-        const q=getQ(qn);
-        const cnt=Object.keys(q.users||{}).length;
-        const locked=Object.values(q.users||{}).filter(u=>u.locked).length;
-        return `<div style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--card2);border-radius:10px;margin-bottom:7px;border:1px solid var(--border);">
+    ${qNames.map(qn=>{
+      const q=getQ(qn);
+      const cnt=Object.keys(q.users||{}).length;
+      const locked=Object.values(q.users||{}).filter(u=>u.locked).length;
+      const isSelected=S.adminQ===qn;
+      return `<div style="background:var(--card);border:1px solid ${isSelected?'rgba(255,215,0,0.5)':'var(--border)'};border-radius:12px;margin-bottom:10px;overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:8px;padding:12px;">
           <div style="flex:1;">
-            <div style="font-size:13px;font-weight:700;">${qn}</div>
-            <div style="font-size:10px;color:var(--muted);">${cnt} participantes · ${locked} confirmados · $${(q.prize||0).toLocaleString()} c/u</div>
+            <div style="font-size:14px;font-weight:800;color:${isSelected?'var(--gold)':'#fff'}">${qn}</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px;">${cnt} participantes · ${locked} confirmados · $${(q.prize||0).toLocaleString()} c/u</div>
           </div>
-          <div style="display:flex;gap:4px;">
-            <button class="btn btn-primary btn-sm" onclick="S.adminQ='${qn}';ST('${activeTab}')">Gestionar →</button>
-            <button class="btn btn-danger btn-sm" onclick="DEL_Q('${qn}')">🗑️</button>
-          </div>
-        </div>`;
-      }).join('')}
-      ${qNames.length===0?'<p style="color:var(--muted);text-align:center;padding:12px;">Sin quinielas aún</p>':''}
-    </div>
-    <div class="card">
+          <button class="btn btn-primary btn-sm" onclick="S.adminQ=S.adminQ==='${qn}'?null:'${qn}';render()">
+            ${isSelected?'▲ Cerrar':'▼ Gestionar'}
+          </button>
+          ${!S.isCoadmin?`<button class="btn btn-danger btn-sm" onclick="DEL_Q('${qn}')">🗑️</button>`:''}
+        </div>
+        ${isSelected?buildUsersInline(qn):''}
+      </div>`;}).join('')}
+    ${qNames.length===0?'<div style="padding:20px;text-align:center;color:var(--muted);">Sin quinielas aún</div>':''}
+    ${!S.isCoadmin?`<div class="card">
       <div class="card-title">➕ Crear nueva quiniela</div>
       <div class="ig"><label>Nombre de la quiniela</label><input type="text" id="nqn" placeholder="Ej: Oficina, Familia, Amigos..." maxlength="40" /></div>
       <div class="ig"><label>Aportación por persona ($)</label><input type="number" id="nqp" value="100" min="0" max="100000" inputmode="numeric" /></div>
       <button class="btn btn-success btn-full" onclick="CREATE_Q()">Crear quiniela ✨</button>
-    </div>
+    </div>`:''}
   </div>`;
 }
 
@@ -2377,8 +2412,7 @@ function buildAdminUsers(){
           </div>
         </div>`;}).join('')}
     </div>
-  </div>
-  ${buildCoAdminSection()}`;
+  </div>`;
 }
 
 // ===================== INSTRUCCIONES =====================
@@ -2695,9 +2729,9 @@ window.DA=()=>{
   const cas=getCoAdmins();
   if(cas[p]){
     S.admin=true;
-    S.adminQ=Object.keys(S.quinielas).filter(k=>k!=='__results__'&&k!=='__coadmins__')[0]||null;
-    S.tab='ar';
     S.isCoadmin=true;
+    S.adminQ=Object.keys(S.quinielas).filter(k=>k!=='__results__')[0]||null;
+    S.tab='ar';
     render();
   }
   else showErr('Contraseña incorrecta');
@@ -2711,20 +2745,40 @@ window.CREATE_Q=()=>{
   S.quinielas[qName]={users:{},prize};
   saveNow().then(()=>render());
 };
-// ── Co-admin section in buildAdminUsers ─────────────────────────────────────
-function buildCoAdminSection(){
-  const cas=Object.keys(getCoAdmins());
-  return `<div class="card" style="margin:10px;border-color:rgba(100,150,255,0.3);">
-    <div class="card-title" style="color:#7aadff;">🔑 Co-administradores</div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Los co-admins pueden capturar resultados pero no pueden crear/borrar quinielas ni usuarios.</div>
-    ${cas.length===0?'<div style="font-size:11px;color:var(--muted);">Sin co-admins configurados</div>':
-      cas.map(pw=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
-        <span style="font-size:12px;font-family:monospace;color:#fff;">🔐 ${'•'.repeat(pw.length)}</span>
-        <button onclick="DEL_COADMIN('${pw}')" class="btn btn-danger btn-sm">Eliminar</button>
-      </div>`).join('')}
-    <button onclick="ADD_COADMIN()" class="btn btn-primary btn-full" style="margin-top:10px;">+ Agregar co-admin</button>
+// ── Co-admin management — dedicated page ─────────────────────────────────────
+function buildCoAdminSection(){ return ''; } // no longer shown inside users
+
+function buildCoAdminPage(){
+  const cas=Object.entries(getCoAdmins());
+  return `<div style="padding:10px;">
+    <div class="card">
+      <div class="card-title" style="color:#7aadff;">🔑 Co-administradores</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5;">
+        Los co-administradores pueden <strong style="color:#fff">capturar resultados de grupos y eliminación</strong> y ver el ranking, pero <strong style="color:#ff8a8a">no pueden</strong> crear/eliminar quinielas, gestionar usuarios ni ver o editar co-admins.
+      </div>
+      ${cas.length===0
+        ?'<div style="padding:16px;text-align:center;color:var(--muted);font-size:12px;">Sin co-admins configurados aún</div>'
+        :cas.map(([pw])=>`
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:rgba(100,150,255,0.07);border:1px solid rgba(100,150,255,0.2);border-radius:10px;margin-bottom:8px;">
+            <div>
+              <div style="font-size:11px;color:#7aadff;margin-bottom:2px;">Contraseña de co-admin</div>
+              <div style="font-family:monospace;font-size:14px;letter-spacing:3px;color:#fff;">${'●'.repeat(Math.min(pw.length,12))}</div>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <button onclick="REVEAL_COADMIN('${pw}')" class="btn btn-secondary btn-sm">👁️ Ver</button>
+              <button onclick="DEL_COADMIN('${pw}')" class="btn btn-danger btn-sm">🗑️ Eliminar</button>
+            </div>
+          </div>`).join('')}
+      <button onclick="ADD_COADMIN()" class="btn btn-primary btn-full" style="margin-top:6px;">
+        ➕ Agregar nuevo co-admin
+      </button>
+    </div>
   </div>`;
 }
+
+window.REVEAL_COADMIN=function(pw){
+  alert('Contraseña: ' + pw);
+};
 
 window.DEL_Q=qn=>{
   if(!confirm('¿Eliminar la quiniela "'+qn+'" y todos sus datos?')) return;
@@ -2884,18 +2938,18 @@ window.SVP=()=>{const v=parseInt(document.getElementById('pinput').value)||0;con
 window.UU=n=>{if(confirm(`¿Desbloquear grupos de ${n}?`)){const q=S.adminQ?getQ(S.adminQ):null;if(q&&q.users[n]){q.users[n].locked=false;saveNow().then(()=>render());}}};
 
 // ── Co-admin management ──────────────────────────────────────────────────────
-function getCoAdmins(){ return S.quinielas['__coadmins__']||{}; }
+function getCoAdmins(){ return S.coadmins||{}; }
 window.ADD_COADMIN=async()=>{
   const pw=prompt('Nueva contraseña de co-administrador:');
   if(!pw||pw.trim()==='') return;
-  if(!S.quinielas['__coadmins__']) S.quinielas['__coadmins__']={};
-  S.quinielas['__coadmins__'][pw.trim()]=true;
+  if(!S.coadmins) S.coadmins={};
+  S.coadmins[pw.trim()]=true;
   await saveNow(); render();
   showToast('✅ Co-admin agregado','info');
 };
 window.DEL_COADMIN=async(pw)=>{
   if(!confirm('¿Eliminar esta contraseña de co-admin?')) return;
-  if(S.quinielas['__coadmins__']) delete S.quinielas['__coadmins__'][pw];
+  if(S.coadmins) delete S.coadmins[pw];
   await saveNow(); render();
 };
 
