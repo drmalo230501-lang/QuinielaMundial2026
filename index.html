@@ -1338,62 +1338,151 @@ function buildBracket(){
   const realKO=R.koresults||{};
   const realRes=R.results||{};
 
-  function teamBox(pos, useReal){
-    const t=useReal
-      ? resolveKOTeam(pos,realRes,realKO)
-      : resolveKOTeam(pos,preds,kopreds);
-    const isPending=!t||t==='?';
-    return `<div style="display:flex;align-items:center;gap:5px;padding:4px 7px;background:${isPending?'rgba(255,255,255,0.03)':'rgba(255,255,255,0.06)'};border-radius:6px;min-width:110px;max-width:130px;overflow:hidden;">
-      <span style="font-size:13px;flex-shrink:0">${isPending?'❓':F(t)}</span>
-      <span style="font-size:9px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${isPending?'var(--muted)':'#fff'}">${isPending?'Por definir':t}</span>
-    </div>`;
+  if(!user||!user.locked) return `<div style="padding:20px;text-align:center;color:var(--muted);">🔒 Bloquea tu quiniela de grupos para ver el bracket</div>`;
+
+  function getWinnerOf(m, kp){
+    if(!kp||kp.h===''||kp.h===undefined) return null;
+    const rh=parseInt(kp.h), ra=parseInt(kp.a);
+    if(isNaN(rh)||isNaN(ra)) return null;
+    if(rh===ra) return null;
+    const ht=resolveKOTeam(m.hPos,preds,kopreds);
+    const at=resolveKOTeam(m.aPos,preds,kopreds);
+    return rh>ra?ht:at;
   }
 
-  function matchBox(m, useReal){
-    const r=useReal?realKO[m.id]:kopreds[m.id];
-    const score=r&&r.h!==''?`${r.h}-${r.a}`:'vs';
-    return `<div style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;">
-      <div style="font-size:8px;color:var(--muted);margin-bottom:1px;">${m.label}</div>
-      ${teamBox(m.hPos,useReal)}
-      <div style="font-size:10px;font-weight:800;color:var(--gold);text-align:center;padding:0 7px;">${score}</div>
-      ${teamBox(m.aPos,useReal)}
+  function matchCard(m, kp, size='sm', useReal=false){
+    const srcPreds = useReal ? realRes : preds;
+    const srcKO    = useReal ? realKO  : kopreds;
+    const ht = resolveKOTeam(m.hPos, srcPreds, srcKO);
+    const at = resolveKOTeam(m.aPos, srcPreds, srcKO);
+    const sh = kp&&kp.h!==''?kp.h:'';
+    const sa = kp&&kp.a!==''?kp.a:'';
+    const rh = sh!==''?parseInt(sh):NaN;
+    const ra = sa!==''?parseInt(sa):NaN;
+    const winner = !isNaN(rh)&&!isNaN(ra)&&rh!==ra ? (rh>ra?ht:at) : null;
+    const isFinal = size==='lg';
+    const isThird = size==='xs';
+    const tbd = '❓';
+
+    const rowH=`<div class="br-team-row${winner===ht?' br-winner':''}">
+      <span class="br-flag">${ht&&ht!=='?'?F(ht):tbd}</span>
+      <span class="br-name ${!ht||ht==='?'?'br-tbd':''}">${ht&&ht!=='?'?ht:'Por definir'}</span>
+      <span class="br-score">${sh}</span>
     </div>`;
+    const rowA=`<div class="br-team-row${winner===at?' br-winner':''}">
+      <span class="br-flag">${at&&at!=='?'?F(at):tbd}</span>
+      <span class="br-name ${!at||at==='?'?'br-tbd':''}">${at&&at!=='?'?at:'Por definir'}</span>
+      <span class="br-score">${sa}</span>
+    </div>`;
+
+    const lbl = isFinal
+      ? `<div class="br-match-lbl br-final-lbl">⭐ GRAN FINAL · 19 JUL · Nueva York</div>`
+      : isThird
+        ? `<div class="br-match-lbl">🥉 3er Lugar · ${m.d} · ${m.v}</div>`
+        : `<div class="br-match-lbl">${m.label} · ${m.d}</div>`;
+
+    const cls = isFinal ? 'br-match br-match-final' : isThird ? 'br-match br-match-third' : 'br-match';
+    return `<div class="${cls}">${lbl}${rowH}${rowA}</div>`;
   }
 
-  function roundCol(round, useReal){
-    const ms=KO_MATCHES.filter(m=>m.round===round);
-    return `<div style="display:flex;flex-direction:column;gap:12px;justify-content:space-around;flex:1;">
-      <div style="font-size:9px;font-weight:800;color:var(--gold);text-align:center;margin-bottom:4px;">${ROUND_LABELS[round]||round}</div>
-      ${ms.map(m=>matchBox(m,useReal)).join('<div style="flex:1;min-height:8px;"></div>')}
-    </div>`;
+  function buildHalf(rounds, side, useReal){
+    const labels={D16:'Dieciseisavos',R16:'Octavos',QF:'Cuartos de Final',SF:'Semis'};
+    let cols = rounds.map(({round, matches})=>{
+      const cards = matches.map(m=>{
+        const kp = useReal ? realKO[m.id] : kopreds[m.id];
+        return matchCard(m, kp||{h:'',a:''}, 'sm', useReal);
+      }).join('');
+      return `<div class="br-col" data-round="${round}">
+        <div class="br-round-label">${labels[round]||round}</div>
+        <div class="br-col-matches">${cards}</div>
+      </div>`;
+    });
+    if(side==='right') cols = cols.reverse();
+    return `<div class="br-half br-half-${side}">${cols.join('')}</div>`;
   }
 
-  function buildHalfBracket(useReal){
-    const label=useReal?'⚽ Resultados reales':'📋 Mis predicciones';
-    const hasReal=Object.values(realKO).some(r=>r&&r.h!=='');
+  function buildFullBracket(useReal){
+    const finM = KO_MATCHES.find(m=>m.round==='FIN');
+    const trdM = KO_MATCHES.find(m=>m.round==='3P');
+    const finKP = useReal ? realKO[finM.id] : kopreds[finM.id];
+    const trdKP = useReal ? realKO[trdM.id] : kopreds[trdM.id];
+
+    // Left half: P73,P76,P79,P82 (D16) → P89,P91 (R16) → P97 (QF) → P101 (SF)
+    const leftRounds=[
+      {round:'D16', matches:KO_MATCHES.filter(m=>m.round==='D16').slice(0,8)},
+      {round:'R16', matches:KO_MATCHES.filter(m=>m.round==='R16').slice(0,4)},
+      {round:'QF',  matches:KO_MATCHES.filter(m=>m.round==='QF').slice(0,2)},
+      {round:'SF',  matches:KO_MATCHES.filter(m=>m.round==='SF').slice(0,1)},
+    ];
+    // Right half
+    const rightRounds=[
+      {round:'D16', matches:KO_MATCHES.filter(m=>m.round==='D16').slice(8,16)},
+      {round:'R16', matches:KO_MATCHES.filter(m=>m.round==='R16').slice(4,8)},
+      {round:'QF',  matches:KO_MATCHES.filter(m=>m.round==='QF').slice(2,4)},
+      {round:'SF',  matches:KO_MATCHES.filter(m=>m.round==='SF').slice(1,2)},
+    ];
+
+    const hasReal=useReal&&Object.values(realKO).some(r=>r&&r.h!=='');
     if(useReal&&!hasReal) return `<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">⏳ Aún no hay resultados reales de eliminación</div>`;
-    return `<div style="margin-bottom:6px;font-size:11px;font-weight:800;color:${useReal?'#7aadff':'var(--gold)'};padding:0 4px;">${label}</div>
-    <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;align-items:flex-start;">
-      ${['D16','R16','QF','SF'].map(r=>roundCol(r,useReal)).join('')}
-      <div style="display:flex;flex-direction:column;gap:8px;flex:1;">
-        <div style="font-size:9px;font-weight:800;color:var(--gold);text-align:center;margin-bottom:4px;">Final</div>
-        ${matchBox(KO_MATCHES.find(m=>m.round==='FIN'),useReal)}
-        <div style="font-size:9px;font-weight:800;color:var(--muted);text-align:center;margin-top:4px;">3° Lugar</div>
-        ${matchBox(KO_MATCHES.find(m=>m.round==='3P'),useReal)}
+
+    return `<div class="br-scroll">
+      <div class="br-root">
+        ${buildHalf(leftRounds,'left',useReal)}
+        <div class="br-center-col">
+          <div class="br-round-label" style="color:#FFD700;">Final</div>
+          <div style="font-size:28px;text-align:center;margin:4px 0;">🏆</div>
+          ${matchCard(finM, finKP||{h:'',a:''}, 'lg', useReal)}
+          <div style="margin-top:10px;width:100%;">
+            ${matchCard(trdM, trdKP||{h:'',a:''}, 'xs', useReal)}
+          </div>
+        </div>
+        ${buildHalf(rightRounds,'right',useReal)}
       </div>
     </div>`;
   }
 
-  if(!user||!user.locked) return `<div style="padding:20px;text-align:center;color:var(--muted);">🔒 Bloquea tu quiniela de grupos para ver el bracket</div>`;
-
-  return `<div style="padding:10px;">
-    <div class="card" style="margin-bottom:10px;">
-      <div class="card-title">🌳 Bracket — Mis predicciones</div>
-      ${buildHalfBracket(false)}
+  return `
+  <style>
+    .br-scroll{overflow-x:auto;width:100%;padding:10px 0 6px;}
+    .br-root{display:flex;align-items:stretch;min-width:820px;gap:0;}
+    .br-half{display:flex;flex:3;min-width:0;align-items:stretch;}
+    .br-half-right{flex-direction:row-reverse;}
+    .br-col{display:flex;flex-direction:column;justify-content:space-around;flex:1;min-width:0;padding:0 2px;}
+    .br-round-label{text-align:center;font-size:8px;font-weight:700;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.5px;padding-bottom:5px;}
+    .br-col-matches{display:flex;flex-direction:column;justify-content:space-around;flex:1;gap:4px;}
+    .br-center-col{flex:1.4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 6px;}
+    .br-match{background:#181860;border:1px solid rgba(255,255,255,0.1);border-radius:8px;overflow:hidden;margin:2px 0;}
+    .br-match:hover{border-color:rgba(255,215,0,0.4);}
+    .br-match-final{border:2px solid rgba(255,215,0,0.6)!important;box-shadow:0 0 12px rgba(255,215,0,0.15);width:100%;}
+    .br-match-third{border-color:rgba(180,130,0,0.3)!important;width:90%;margin:0 auto;}
+    .br-match-lbl{font-size:7.5px;color:rgba(255,255,255,0.4);padding:2px 6px;background:rgba(0,0,0,0.2);border-bottom:1px solid rgba(255,255,255,0.06);letter-spacing:0.3px;}
+    .br-final-lbl{font-size:9px;color:#FFD700;background:rgba(255,215,0,0.1);padding:3px 6px;text-align:center;letter-spacing:0.5px;}
+    .br-team-row{display:flex;align-items:center;gap:4px;padding:3px 6px;min-height:24px;border-bottom:1px solid rgba(255,255,255,0.05);}
+    .br-match-final .br-team-row{padding:5px 9px;min-height:30px;}
+    .br-team-row:last-of-type{border-bottom:none;}
+    .br-winner{background:rgba(0,200,83,0.12);}
+    .br-winner .br-name{color:#FFD700;font-weight:700;}
+    .br-winner .br-score{color:#FFD700;}
+    .br-flag{font-size:12px;flex-shrink:0;}
+    .br-match-final .br-flag{font-size:16px;}
+    .br-name{flex:1;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:rgba(255,255,255,0.85);}
+    .br-match-final .br-name{font-size:11px;}
+    .br-score{font-size:10px;font-weight:700;color:rgba(255,255,255,0.5);min-width:12px;text-align:center;}
+    .br-tbd{color:rgba(255,255,255,0.3);font-style:italic;}
+    /* Bracket connectors */
+    .br-half-left .br-col:not(:last-child) .br-match:nth-child(odd){border-right:2px solid rgba(255,255,255,0.12);border-bottom-right-radius:0;}
+    .br-half-left .br-col:not(:last-child) .br-match:nth-child(even){border-right:2px solid rgba(255,255,255,0.12);border-top-right-radius:0;}
+    .br-half-right .br-col:not(:last-child) .br-match:nth-child(odd){border-left:2px solid rgba(255,255,255,0.12);border-bottom-left-radius:0;}
+    .br-half-right .br-col:not(:last-child) .br-match:nth-child(even){border-left:2px solid rgba(255,255,255,0.12);border-top-left-radius:0;}
+  </style>
+  <div style="padding:10px 0 0;">
+    <div class="card" style="margin:0 10px 10px;">
+      <div class="card-title">📋 Mis predicciones</div>
+      ${buildFullBracket(false)}
     </div>
-    <div class="card">
-      <div class="card-title">🌳 Bracket — Resultados reales</div>
-      ${buildHalfBracket(true)}
+    <div class="card" style="margin:0 10px 10px;">
+      <div class="card-title">⚽ Resultados reales</div>
+      ${buildFullBracket(true)}
     </div>
   </div>`;
 }
