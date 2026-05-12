@@ -1571,7 +1571,10 @@ function buildBracket(){
 
 // ===================== LOGIN =====================
 function buildLogin(){
-  const qNames=Object.keys(S.quinielas).filter(k=>k!=='__results__'&&k!=='__coadmins__');
+  const allQNames=Object.keys(S.quinielas).filter(k=>k!=='__results__'&&k!=='__coadmins__');
+  const qNames=S.isCoadmin
+    ? allQNames.filter(k=>getCoadminQuinielas(S.coadminPw||'').includes(k))
+    : allQNames;
   const qOptions=qNames.map(q=>`<option value="${q}">${q}</option>`).join('');
   return `<div class="header"><span class="trophy">🏆</span><h1>Quiniela Mundial 2026</h1><p>🇺🇸 USA · 🇲🇽 México · 🇨🇦 Canadá</p></div>
   <div style="padding:10px;">
@@ -2079,7 +2082,10 @@ function buildPointsChart(qName){
 }
 
 function buildRankingAll(){
-  const qNames=Object.keys(S.quinielas).filter(k=>k!=='__results__'&&k!=='__coadmins__');
+  const allQNames=Object.keys(S.quinielas).filter(k=>k!=='__results__'&&k!=='__coadmins__');
+  const qNames=S.isCoadmin
+    ? allQNames.filter(k=>getCoadminQuinielas(S.coadminPw||'').includes(k))
+    : allQNames;
   if(!qNames.length) return '<div style="padding:20px;color:var(--muted);text-align:center;">Sin quinielas creadas.</div>';
   return qNames.map(qn=>{
     const q=getQ(qn);
@@ -2108,16 +2114,17 @@ function buildAdminGroupResults(){
   const qBanner=S.adminQ?buildAdminQBanner(S.adminQ):'';
   const playedG=ALL.filter(m=>{const r=(R.results||{})[m.id];return r&&r.h!==''&&r.h!==undefined;}).length;
   const playedKO=KO_MATCHES.filter(m=>{const r=(R.koresults||{})[m.id];return r&&r.h!==''&&r.h!==undefined;}).length;
-  const resetBtn=`<div style="padding:10px;">
+  const resetBtn=S.isCoadmin?'':
+  `<div style="padding:10px;">
     <div style="background:rgba(220,50,50,0.1);border:1px solid rgba(220,50,50,0.3);border-radius:12px;padding:12px;">
       <div style="font-size:12px;font-weight:700;color:#ff6b6b;margin-bottom:4px;">⚠️ Zona de peligro</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Esto borrará todos los resultados capturados (grupos y eliminación). Las predicciones de los usuarios NO se borran.</div>
       <div style="display:flex;gap:8px;">
         <button class="btn btn-danger" style="flex:1;" onclick="RESET_RESULTS()">
-          🗑️ Limpiar resultados de grupos (${playedG})
+          🗑️ Limpiar resultados de grupos (\${playedG})
         </button>
         <button class="btn btn-danger" style="flex:1;" onclick="RESET_KO_RESULTS()">
-          🗑️ Limpiar resultados eliminación (${playedKO})
+          🗑️ Limpiar resultados eliminación (\${playedKO})
         </button>
       </div>
       <button class="btn btn-danger btn-full" style="margin-top:8px;background:rgba(180,0,0,0.5);" onclick="RESET_ALL_RESULTS()">
@@ -2269,10 +2276,11 @@ function buildAdminKOResults(){
               <input type="number" class="ko-score-inp" min="0" max="20" value="${r.a}" oninput="SKR('${m.id}','a',this.value)" inputmode="numeric" pattern="[0-9]*" />
             </div>`:`<span style="font-size:10px;color:var(--muted);">Pendiente</span>`}
             ${hasR?`<span class="mcard-result-badge rb-winner" style="margin-top:3px;">✅ Guardado</span>`:''}
-            <button onclick="OPEN_OVERRIDE('${m.id}','${dispH||''}','${dispA||''}')"
+            ${S.isCoadmin?'':
+            `<button onclick="OPEN_OVERRIDE('${m.id}','${dispH||''}','${dispA||''}')"
               style="margin-top:4px;font-size:9px;padding:2px 7px;border-radius:8px;border:1px solid rgba(255,215,0,0.3);background:rgba(255,215,0,0.08);color:var(--gold);cursor:pointer;">
               ✏️ ${hasOverride?'Editar equipos':'Forzar equipos'}
-            </button>
+            </button>`}
           </div>
           <div class="ko-team">
             <span class="ko-flag">${F(dispA||'?')}</span>
@@ -2295,7 +2303,10 @@ function buildAdminQBanner(qName){
 }
 
 function buildAdminQSelector(activeTab){
-  const qNames=Object.keys(S.quinielas).filter(k=>k!=='__results__'&&k!=='__coadmins__');
+  const allQNames=Object.keys(S.quinielas).filter(k=>k!=='__results__'&&k!=='__coadmins__');
+  const qNames=S.isCoadmin
+    ? allQNames.filter(k=>getCoadminQuinielas(S.coadminPw||'').includes(k))
+    : allQNames;
 
   function buildUsersInline(qn){
     const q=getQ(qn); if(!q) return '';
@@ -2709,7 +2720,7 @@ function notifyResultSaved(matchId, h, a, isKO){
 
 // ===================== EVENTS =====================
 window.ST=t=>{S.tab=t;render();const sc=document.getElementById('sc');if(sc)sc.scrollTop=0;};
-window.LO=()=>{S.cur=null;S.admin=false;S.adminQ=null;S.tab='grupos';render();};
+window.LO=()=>{S.cur=null;S.admin=false;S.isCoadmin=false;S.coadminPw=null;S.adminQ=null;S.tab='grupos';render();};
 window.DL=()=>{
   const n=(document.getElementById('ln')||{}).value||'';
   const name=n.trim();
@@ -2730,7 +2741,9 @@ window.DA=()=>{
   if(cas[p]){
     S.admin=true;
     S.isCoadmin=true;
-    S.adminQ=Object.keys(S.quinielas).filter(k=>k!=='__results__')[0]||null;
+    S.coadminPw=p;
+    const allowed=getCoadminQuinielas(p);
+    S.adminQ=allowed[0]||Object.keys(S.quinielas).filter(k=>k!=='__results__')[0]||null;
     S.tab='ar';
     render();
   }
@@ -2750,26 +2763,47 @@ function buildCoAdminSection(){ return ''; } // no longer shown inside users
 
 function buildCoAdminPage(){
   const cas=Object.entries(getCoAdmins());
+  const allQ=Object.keys(S.quinielas).filter(k=>k!=='__results__'&&k!=='__coadmins__');
   return `<div style="padding:10px;">
     <div class="card">
       <div class="card-title" style="color:#7aadff;">🔑 Co-administradores</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5;">
-        Los co-administradores pueden <strong style="color:#fff">capturar resultados de grupos y eliminación</strong> y ver el ranking, pero <strong style="color:#ff8a8a">no pueden</strong> crear/eliminar quinielas, gestionar usuarios ni ver o editar co-admins.
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5;">
+        Pueden capturar resultados <strong style="color:#fff">solo en las quinielas que les asignes</strong>. No pueden borrar resultados ni gestionar usuarios.
       </div>
       ${cas.length===0
         ?'<div style="padding:16px;text-align:center;color:var(--muted);font-size:12px;">Sin co-admins configurados aún</div>'
-        :cas.map(([pw])=>`
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:rgba(100,150,255,0.07);border:1px solid rgba(100,150,255,0.2);border-radius:10px;margin-bottom:8px;">
-            <div>
-              <div style="font-size:11px;color:#7aadff;margin-bottom:2px;">Contraseña de co-admin</div>
-              <div style="font-family:monospace;font-size:14px;letter-spacing:3px;color:#fff;">${'●'.repeat(Math.min(pw.length,12))}</div>
+        :cas.map(([pw,data])=>{
+          const assignedQs=(data&&data.quinielas)||[];
+          return `<div style="background:rgba(100,150,255,0.06);border:1px solid rgba(100,150,255,0.2);border-radius:12px;margin-bottom:12px;overflow:hidden;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;">
+              <div>
+                <div style="font-size:10px;color:#7aadff;margin-bottom:2px;">Contraseña de co-admin</div>
+                <div style="font-family:monospace;font-size:14px;letter-spacing:2px;color:#fff;">${'●'.repeat(Math.min(pw.length,14))}</div>
+              </div>
+              <div style="display:flex;gap:6px;">
+                <button onclick="REVEAL_COADMIN('${pw}')" class="btn btn-secondary btn-sm">👁️</button>
+                <button onclick="DEL_COADMIN('${pw}')" class="btn btn-danger btn-sm">🗑️</button>
+              </div>
             </div>
-            <div style="display:flex;gap:6px;">
-              <button onclick="REVEAL_COADMIN('${pw}')" class="btn btn-secondary btn-sm">👁️ Ver</button>
-              <button onclick="DEL_COADMIN('${pw}')" class="btn btn-danger btn-sm">🗑️ Eliminar</button>
+            <div style="padding:8px 12px;border-top:1px solid rgba(100,150,255,0.15);">
+              <div style="font-size:10px;color:#7aadff;margin-bottom:7px;font-weight:700;">Acceso a quinielas:</div>
+              ${allQ.length===0
+                ?'<div style="font-size:11px;color:var(--muted);">No hay quinielas creadas</div>'
+                :allQ.map(qn=>{
+                  const has=assignedQs.includes(qn);
+                  return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+                    <div onclick="TOGGLE_COADMIN_Q('${pw}','${qn}')"
+                      style="width:20px;height:20px;border-radius:5px;flex-shrink:0;cursor:pointer;
+                        background:${has?'var(--gold)':'rgba(255,255,255,0.08)'};
+                        border:1px solid ${has?'var(--gold)':'rgba(255,255,255,0.2)'};
+                        display:flex;align-items:center;justify-content:center;font-size:13px;">
+                      ${has?'✓':''}
+                    </div>
+                    <span style="font-size:12px;color:${has?'#fff':'var(--muted)'};">${qn}</span>
+                  </div>`;}).join('')}
             </div>
-          </div>`).join('')}
-      <button onclick="ADD_COADMIN()" class="btn btn-primary btn-full" style="margin-top:6px;">
+          </div>`;}).join('')}
+      <button onclick="ADD_COADMIN()" class="btn btn-primary btn-full" style="margin-top:4px;">
         ➕ Agregar nuevo co-admin
       </button>
     </div>
@@ -2939,17 +2973,32 @@ window.UU=n=>{if(confirm(`¿Desbloquear grupos de ${n}?`)){const q=S.adminQ?getQ
 
 // ── Co-admin management ──────────────────────────────────────────────────────
 function getCoAdmins(){ return S.coadmins||{}; }
+// Structure: S.coadmins = { "password": { quinielas: ["Q1","Q2"] } }
+function getCoadminQuinielas(pw){
+  const ca=(S.coadmins||{})[pw];
+  if(!ca) return [];
+  return ca.quinielas||[];
+}
+
 window.ADD_COADMIN=async()=>{
   const pw=prompt('Nueva contraseña de co-administrador:');
   if(!pw||pw.trim()==='') return;
   if(!S.coadmins) S.coadmins={};
-  S.coadmins[pw.trim()]=true;
+  S.coadmins[pw.trim()]={quinielas:[]};
   await saveNow(); render();
-  showToast('✅ Co-admin agregado','info');
+  showToast('✅ Co-admin agregado. Asígnale quinielas.','info');
 };
 window.DEL_COADMIN=async(pw)=>{
   if(!confirm('¿Eliminar esta contraseña de co-admin?')) return;
   if(S.coadmins) delete S.coadmins[pw];
+  await saveNow(); render();
+};
+window.TOGGLE_COADMIN_Q=async(pw, qn)=>{
+  if(!S.coadmins||!S.coadmins[pw]) return;
+  const qs=S.coadmins[pw].quinielas||[];
+  const idx=qs.indexOf(qn);
+  if(idx>=0) qs.splice(idx,1); else qs.push(qn);
+  S.coadmins[pw].quinielas=qs;
   await saveNow(); render();
 };
 
