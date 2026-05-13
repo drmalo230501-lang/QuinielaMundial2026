@@ -1570,37 +1570,95 @@ function buildBracket(){
 
 
 // ===================== LOGIN =====================
+// S._loginStep: 'enter' | 'newpin' | 'checkpin'
+// S._loginData: {name, qName}
+
 function buildLogin(){
-  const allQNames=Object.keys(S.quinielas).filter(k=>k!=='__results__'&&k!=='__coadmins__');
-  const qNames=S.isCoadmin
-    ? allQNames.filter(k=>getCoadminQuinielas(S.coadminPw||'').includes(k))
-    : allQNames;
-  const qOptions=qNames.map(q=>`<option value="${q}">${q}</option>`).join('');
-  return `<div class="header"><span class="trophy">🏆</span><h1>Quiniela Mundial 2026</h1><p>🇺🇸 USA · 🇲🇽 México · 🇨🇦 Canadá</p></div>
-  <div style="padding:10px;">
-    <div class="card" style="margin:0 0 10px;">
-      <h2 style="text-align:center;margin-bottom:14px;color:var(--gold);font-size:17px;">⚽ Entrar a la Quiniela</h2>
-      <div class="ig">
-        <label>Tu nombre</label>
-        <input type="text" id="ln" placeholder="Ej: Juan García" maxlength="30" onkeydown="if(event.key==='Enter')DL()" />
+  const step=S._loginStep||'enter';
+
+  const header=`<div class="header"><span class="trophy">🏆</span><h1>Quiniela Mundial 2026</h1><p>🇺🇸 USA · 🇲🇽 México · 🇨🇦 Canadá</p></div>`;
+
+  // ── STEP 1: Name + invite code ──────────────────────────────────────────────
+  if(step==='enter'){
+    return header+`<div style="padding:10px;">
+      <div class="card" style="margin:0 0 10px;">
+        <h2 style="text-align:center;margin-bottom:6px;color:var(--gold);font-size:17px;">⚽ Entrar a la Quiniela</h2>
+        <p style="text-align:center;font-size:11px;color:var(--muted);margin-bottom:16px;">Ingresa tu nombre y el código que te compartió el organizador</p>
+        <div class="ig">
+          <label>Tu nombre</label>
+          <input type="text" id="ln" placeholder="Ej: Juan García" maxlength="30"
+            onkeydown="if(event.key==='Enter')document.getElementById('lcode').focus()" />
+        </div>
+        <div class="ig">
+          <label>Código de la quiniela</label>
+          <input type="text" id="lcode" placeholder="Ej: MUNDIAL26" maxlength="10"
+            style="text-transform:uppercase;font-family:monospace;font-size:16px;letter-spacing:3px;text-align:center;"
+            onkeydown="if(event.key==='Enter')DL()" />
+        </div>
+        <button class="btn btn-primary btn-full" onclick="DL()" style="font-size:15px;padding:13px;">Entrar 🚀</button>
+        <hr class="sep"/>
+        <div class="ig"><label>Contraseña de administrador</label><input type="password" id="ap2" placeholder="••••••••" onkeydown="if(event.key==='Enter')DA()" /></div>
+        <button class="btn btn-secondary btn-full" onclick="DA()" style="border-color:rgba(255,215,0,0.4);color:var(--gold);">Acceso admin ⚙️</button>
+        <div id="lerr" style="margin-top:8px;"></div>
       </div>
-      <div class="ig">
-        <label>Nombre de tu quiniela</label>
-        ${qNames.length>0
-          ? `<select id="lq" style="width:100%;padding:12px 14px;background:var(--card2);border:1px solid var(--border);border-radius:10px;color:#fff;font-size:15px;outline:none;appearance:none;">
-               ${qOptions}
-             </select>`
-          : `<input type="text" id="lq" placeholder="Nombre de la quiniela (ej: Oficina)" maxlength="40" />`
-        }
+    </div>`;
+  }
+
+  // ── STEP 2: New user — create PIN ───────────────────────────────────────────
+  if(step==='newpin'){
+    const d=S._loginData||{};
+    return header+`<div style="padding:10px;">
+      <div class="card">
+        <div style="text-align:center;margin-bottom:16px;">
+          <div style="font-size:32px;margin-bottom:8px;">👋</div>
+          <div style="font-size:16px;font-weight:800;color:var(--gold);">¡Bienvenido, ${d.name}!</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">Primera vez en <strong style="color:#fff">${d.qName}</strong></div>
+        </div>
+        <p style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:16px;">Crea un PIN de 4 dígitos para proteger tu quiniela. Lo necesitarás cada vez que entres.</p>
+        <div class="ig">
+          <label>Elige tu PIN (4 dígitos)</label>
+          <input type="password" id="pin1" placeholder="••••" maxlength="4" inputmode="numeric" pattern="[0-9]*"
+            style="text-align:center;font-size:24px;letter-spacing:8px;"
+            onkeydown="if(event.key==='Enter')document.getElementById('pin2').focus()" />
+        </div>
+        <div class="ig">
+          <label>Confirma tu PIN</label>
+          <input type="password" id="pin2" placeholder="••••" maxlength="4" inputmode="numeric" pattern="[0-9]*"
+            style="text-align:center;font-size:24px;letter-spacing:8px;"
+            onkeydown="if(event.key==='Enter')DL_SETPIN()" />
+        </div>
+        <button class="btn btn-success btn-full" onclick="DL_SETPIN()" style="font-size:15px;padding:13px;">Crear PIN y entrar 🔐</button>
+        <button class="btn btn-secondary btn-full" onclick="S._loginStep='enter';S._loginData=null;render()" style="margin-top:6px;">← Volver</button>
+        <div id="lerr" style="margin-top:8px;"></div>
       </div>
-      <button class="btn btn-primary btn-full" onclick="DL()">Entrar 🚀</button>
-      <hr class="sep"/>
-      <div class="ig"><label>Contraseña de administrador</label><input type="password" id="ap2" placeholder="••••••••" onkeydown="if(event.key==='Enter')DA()" /></div>
-      <button class="btn btn-secondary btn-full" onclick="DA()" style="border-color:rgba(255,215,0,0.4);color:var(--gold);">Acceso admin ⚙️</button>
-      <div id="lerr" style="margin-top:8px;"></div>
-    </div>
-    ${qNames.length===0?`<div class="alert alert-w">⚠️ Aún no hay quinielas creadas. El administrador debe crear una primero.</div>`:''}
-  </div>`;
+    </div>`;
+  }
+
+  // ── STEP 3: Returning user — check PIN ─────────────────────────────────────
+  if(step==='checkpin'){
+    const d=S._loginData||{};
+    return header+`<div style="padding:10px;">
+      <div class="card">
+        <div style="text-align:center;margin-bottom:16px;">
+          <div style="font-size:32px;margin-bottom:8px;">🔐</div>
+          <div style="font-size:16px;font-weight:800;color:var(--gold);">${d.name}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">Quiniela: <strong style="color:#fff">${d.qName}</strong></div>
+        </div>
+        <div class="ig">
+          <label style="text-align:center;display:block;">Ingresa tu PIN</label>
+          <input type="password" id="pincheck" placeholder="••••" maxlength="4" inputmode="numeric" pattern="[0-9]*"
+            style="text-align:center;font-size:28px;letter-spacing:10px;" autofocus
+            onkeydown="if(event.key==='Enter')DL_CHECKPIN()" />
+        </div>
+        <button class="btn btn-primary btn-full" onclick="DL_CHECKPIN()" style="font-size:15px;padding:13px;">Entrar 🚀</button>
+        <button class="btn btn-secondary btn-full" onclick="S._loginStep='enter';S._loginData=null;render()" style="margin-top:6px;">← No soy yo</button>
+        <div id="lerr" style="margin-top:8px;"></div>
+        <div style="margin-top:12px;text-align:center;font-size:10px;color:var(--muted);">¿Olvidaste tu PIN? Pide al administrador que te desbloquee.</div>
+      </div>
+    </div>`;
+  }
+
+  return header+'<div style="padding:20px;text-align:center;color:var(--muted);">Cargando...</div>';
 }
 
 // ===================== GRUPOS =====================
@@ -2326,7 +2384,8 @@ function buildAdminQSelector(activeTab){
               <div style="font-size:9px;color:var(--muted);">${u.locked?stats.total+'pts · '+stats.exact+'✅ '+stats.winner+'✔':Object.values(u.preds||{}).filter(p=>p&&p.h!=='').length+'/'+TOTAL+' capturados'}</div>
             </div>
             <div style="display:flex;flex-direction:column;gap:3px;">
-              ${u.locked?`<button class="btn btn-secondary btn-sm" onclick="UU('${n}')">🔓</button>`:''}
+              ${u.locked?`<button class="btn btn-secondary btn-sm" onclick="UU('${n}')" title="Desbloquear grupos">🔓</button>`:''}
+              <button class="btn btn-secondary btn-sm" onclick="RESET_PIN('${n}','${qn}')" title="Resetear PIN">🔑</button>
               <button class="btn btn-success btn-sm" onclick="OPEN_EDIT('${n}')">✏️</button>
               <button class="btn btn-danger btn-sm" onclick="DEL('${n}')">🗑️</button>
             </div>
@@ -2345,6 +2404,11 @@ function buildAdminQSelector(activeTab){
           <div style="flex:1;">
             <div style="font-size:14px;font-weight:800;color:${isSelected?'var(--gold)':'#fff'}">${qn}</div>
             <div style="font-size:10px;color:var(--muted);margin-top:2px;">${cnt} participantes · ${locked} confirmados · $${(q.prize||0).toLocaleString()} c/u</div>
+          <div style="margin-top:4px;display:flex;align-items:center;gap:6px;">
+            <span style="font-size:10px;color:rgba(255,215,0,0.7);">🔑 Código:</span>
+            <span style="font-family:monospace;font-size:12px;font-weight:800;color:var(--gold);letter-spacing:2px;">${q.inviteCode||'—'}</span>
+            <button onclick="CHANGE_Q_CODE('${qn}')" style="font-size:9px;padding:1px 6px;border-radius:6px;border:1px solid rgba(255,215,0,0.3);background:transparent;color:var(--gold);cursor:pointer;">✏️</button>
+          </div>
           </div>
           <button class="btn btn-primary btn-sm" onclick="S.adminQ=S.adminQ==='${qn}'?null:'${qn}';render()">
             ${isSelected?'▲ Cerrar':'▼ Gestionar'}
@@ -2358,6 +2422,13 @@ function buildAdminQSelector(activeTab){
       <div class="card-title">➕ Crear nueva quiniela</div>
       <div class="ig"><label>Nombre de la quiniela</label><input type="text" id="nqn" placeholder="Ej: Oficina, Familia, Amigos..." maxlength="40" /></div>
       <div class="ig"><label>Aportación por persona ($)</label><input type="number" id="nqp" value="100" min="0" max="100000" inputmode="numeric" /></div>
+      <div class="ig">
+        <label>Código de invitación <span style="color:var(--muted);font-weight:400;">(los participantes lo usan para entrar)</span></label>
+        <div style="display:flex;gap:6px;">
+          <input type="text" id="nqcode" placeholder="Ej: MUNDIAL26" maxlength="10" style="flex:1;text-transform:uppercase;font-family:monospace;font-size:15px;letter-spacing:2px;" />
+          <button onclick="REGEN_CODE()" class="btn btn-secondary" style="white-space:nowrap;flex-shrink:0;">🔀 Generar</button>
+        </div>
+      </div>
       <button class="btn btn-success btn-full" onclick="CREATE_Q()">Crear quiniela ✨</button>
     </div>`:''}
   </div>`;
@@ -2720,18 +2791,66 @@ function notifyResultSaved(matchId, h, a, isKO){
 
 // ===================== EVENTS =====================
 window.ST=t=>{S.tab=t;render();const sc=document.getElementById('sc');if(sc)sc.scrollTop=0;};
-window.LO=()=>{S.cur=null;S.admin=false;S.isCoadmin=false;S.coadminPw=null;S.adminQ=null;S.tab='grupos';render();};
+window.LO=()=>{S.cur=null;S.admin=false;S.isCoadmin=false;S.coadminPw=null;S.adminQ=null;S.tab='grupos';S._loginStep=null;S._loginData=null;render();};
 window.DL=()=>{
-  const n=(document.getElementById('ln')||{}).value||'';
-  const name=n.trim();
+  // Step 1: validate name + invite code, then branch to pin flow
+  const name=(document.getElementById('ln')||{}).value.trim();
+  const code=(document.getElementById('lcode')||{}).value.trim().toUpperCase();
   if(!name){showErr('Por favor ingresa tu nombre');return;}
-  const qEl=document.getElementById('lq');
-  const qName=(qEl?qEl.value:'').trim();
-  if(!qName){showErr('Selecciona o ingresa el nombre de tu quiniela');return;}
-  if(!S.quinielas[qName]){showErr('Esa quiniela no existe. Pide al administrador que la cree.');return;}
+  if(!code){showErr('Ingresa el código de tu quiniela');return;}
+
+  // Find quiniela by invite code
+  const qName=Object.keys(S.quinielas).find(k=>{
+    const q=S.quinielas[k];
+    return q.inviteCode&&q.inviteCode.toUpperCase()===code;
+  });
+  if(!qName){showErr('Código incorrecto. Verifica con tu organizador.');return;}
+
+  const q=S.quinielas[qName];
+  S._loginData={name,qName};
+
+  if(!q.users[name]){
+    // New user → ask to create PIN
+    S._loginStep='newpin';
+    render();
+  } else if(!q.users[name].pin){
+    // Existing user without PIN (migration) → ask to set one
+    S._loginStep='newpin';
+    render();
+  } else {
+    // Returning user → ask for PIN
+    S._loginStep='checkpin';
+    render();
+  }
+};
+
+window.DL_SETPIN=()=>{
+  const pin1=(document.getElementById('pin1')||{}).value.trim();
+  const pin2=(document.getElementById('pin2')||{}).value.trim();
+  if(!pin1||pin1.length<4){showErr('El PIN debe tener 4 dígitos');return;}
+  if(!/^\d{4}$/.test(pin1)){showErr('El PIN solo puede tener números');return;}
+  if(pin1!==pin2){showErr('Los PINs no coinciden');return;}
+
+  const {name,qName}=S._loginData;
   const q=S.quinielas[qName];
   if(!q.users[name]) q.users[name]={preds:{},kopreds:{},locked:false,kolocked:false};
-  S.cur={name,quinielaName:qName};S.tab='grupos';saveNow().then(()=>render());
+  q.users[name].pin=pin1;
+  S._loginStep=null; S._loginData=null;
+  S.cur={name,quinielaName:qName};
+  S.tab='grupos';
+  saveNow().then(()=>render());
+};
+
+window.DL_CHECKPIN=()=>{
+  const entered=(document.getElementById('pincheck')||{}).value.trim();
+  const {name,qName}=S._loginData;
+  const q=S.quinielas[qName];
+  const stored=q&&q.users[name]&&q.users[name].pin;
+  if(entered!==stored){showErr('PIN incorrecto. Inténtalo de nuevo.');return;}
+  S._loginStep=null; S._loginData=null;
+  S.cur={name,quinielaName:qName};
+  S.tab='grupos';
+  render();
 };
 window.DA=()=>{
   const p=(document.getElementById('ap2')||{}).value||'';
@@ -2749,14 +2868,32 @@ window.DA=()=>{
   }
   else showErr('Contraseña incorrecta');
 };
+// Generate a random 6-char invite code
+function genCode(){ return Math.random().toString(36).slice(2,8).toUpperCase(); }
+
 window.CREATE_Q=()=>{
   const name=(document.getElementById('nqn')||{}).value||'';
   const prize=parseInt((document.getElementById('nqp')||{}).value)||100;
+  const codeEl=document.getElementById('nqcode');
   const qName=name.trim();
   if(!qName){alert('Ingresa un nombre para la quiniela');return;}
   if(S.quinielas[qName]){alert('Ya existe una quiniela con ese nombre');return;}
-  S.quinielas[qName]={users:{},prize};
+  const inviteCode=(codeEl&&codeEl.value.trim())||genCode();
+  S.quinielas[qName]={users:{},prize,inviteCode:inviteCode.toUpperCase()};
   saveNow().then(()=>render());
+};
+
+window.REGEN_CODE=()=>{
+  const el=document.getElementById('nqcode');
+  if(el) el.value=genCode();
+};
+
+window.CHANGE_Q_CODE=async(qName)=>{
+  const newCode=prompt('Nuevo código de invitación para "'+qName+'" (deja vacío para generar uno):');
+  const code=newCode&&newCode.trim()?newCode.trim().toUpperCase():genCode();
+  if(S.quinielas[qName]) S.quinielas[qName].inviteCode=code;
+  await saveNow(); render();
+  alert('Nuevo código: '+code);
 };
 // ── Co-admin management — dedicated page ─────────────────────────────────────
 function buildCoAdminSection(){ return ''; } // no longer shown inside users
@@ -2970,6 +3107,11 @@ window.SAKR=btn=>{
 
 window.SVP=()=>{const v=parseInt(document.getElementById('pinput').value)||0;const q=S.adminQ?getQ(S.adminQ):null;if(q)q.prize=v;save();render();};
 window.UU=n=>{if(confirm(`¿Desbloquear grupos de ${n}?`)){const q=S.adminQ?getQ(S.adminQ):null;if(q&&q.users[n]){q.users[n].locked=false;saveNow().then(()=>render());}}};
+window.RESET_PIN=(n,qn)=>{
+  if(!confirm(`¿Resetear el PIN de ${n}? La próxima vez que entre deberá crear uno nuevo.`)) return;
+  const q=getQ(qn);
+  if(q&&q.users[n]){ delete q.users[n].pin; saveNow().then(()=>render()); showToast('🔑 PIN reseteado de '+n,'info'); }
+};
 
 // ── Co-admin management ──────────────────────────────────────────────────────
 function getCoAdmins(){ return S.coadmins||{}; }
