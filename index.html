@@ -488,6 +488,31 @@ async function load(){
       }
     }
   }catch(e){ console.error('Error cargando datos:',e); }
+
+  // ── Auto-login from localStorage ──────────────────────────────────────────
+  try{
+    const saved=localStorage.getItem('q2026_session');
+    if(saved){
+      const sess=JSON.parse(saved);
+      // Verify user still exists and PIN matches
+      const q=S.quinielas[sess.qName];
+      if(q&&q.users[sess.name]&&q.users[sess.name].pin===sess.pin){
+        S.cur={name:sess.name,quinielaName:sess.qName};
+        S.tab='grupos';
+        render();
+        return;
+      } else {
+        localStorage.removeItem('q2026_session');
+      }
+    }
+  }catch(e){}
+
+  // ── Read ?q=CODE from URL to pre-fill invite code ─────────────────────────
+  try{
+    const urlCode=new URLSearchParams(window.location.search).get('q');
+    if(urlCode) S._urlCode=urlCode.toUpperCase();
+  }catch(e){}
+
   render();
 }
 let _saveTimer=null;
@@ -1262,7 +1287,9 @@ function buildHTML(){
   if(!S.cur&&!S.admin) return buildLogin();
   const content=buildContent();
   const nav=S.admin?buildAdminNav():buildUserNav();
-  const qLabel=S.admin?(S.adminQ?`⚙️ Admin: ${S.adminQ}`:'⚙️ Todas las quinielas'):`👤 ${S.cur.name} · ${S.cur.quinielaName}`;
+  const qLabel=S.admin
+    ?(S.adminQ?`⚙️ Admin: ${S.adminQ}`:'⚙️ Todas las quinielas')
+    :`👤 ${S.cur.name} · ${S.cur.quinielaName} <span onclick="LO()" style="margin-left:8px;font-size:9px;color:rgba(255,255,255,0.35);cursor:pointer;text-decoration:underline;">Salir</span>`;
   const deadline=new Date('2026-06-11T00:00:00');
   const now2=new Date();
   const diff=deadline-now2;
@@ -1592,8 +1619,10 @@ function buildLogin(){
         <div class="ig">
           <label>Código de la quiniela</label>
           <input type="text" id="lcode" placeholder="Ej: MUNDIAL26" maxlength="10"
+            value="${S._urlCode||''}"
             style="text-transform:uppercase;font-family:monospace;font-size:16px;letter-spacing:3px;text-align:center;"
             onkeydown="if(event.key==='Enter')DL()" />
+          ${S._urlCode?'<div style="font-size:10px;color:#69ff6e;margin-top:4px;">✅ Código detectado automáticamente</div>':''}
         </div>
         <button class="btn btn-primary btn-full" onclick="DL()" style="font-size:15px;padding:13px;">Entrar 🚀</button>
         <hr class="sep"/>
@@ -2404,10 +2433,17 @@ function buildAdminQSelector(activeTab){
           <div style="flex:1;">
             <div style="font-size:14px;font-weight:800;color:${isSelected?'var(--gold)':'#fff'}">${qn}</div>
             <div style="font-size:10px;color:var(--muted);margin-top:2px;">${cnt} participantes · ${locked} confirmados · $${(q.prize||0).toLocaleString()} c/u</div>
-          <div style="margin-top:4px;display:flex;align-items:center;gap:6px;">
-            <span style="font-size:10px;color:rgba(255,215,0,0.7);">🔑 Código:</span>
-            <span style="font-family:monospace;font-size:12px;font-weight:800;color:var(--gold);letter-spacing:2px;">${q.inviteCode||'—'}</span>
-            <button onclick="CHANGE_Q_CODE('${qn}')" style="font-size:9px;padding:1px 6px;border-radius:6px;border:1px solid rgba(255,215,0,0.3);background:transparent;color:var(--gold);cursor:pointer;">✏️</button>
+          <div style="margin-top:6px;background:rgba(255,215,0,0.06);border:1px solid rgba(255,215,0,0.2);border-radius:8px;padding:7px 10px;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+              <span style="font-size:10px;color:rgba(255,215,0,0.7);">🔑 Código:</span>
+              <span style="font-family:monospace;font-size:14px;font-weight:800;color:var(--gold);letter-spacing:3px;">${q.inviteCode||'—'}</span>
+              <button onclick="CHANGE_Q_CODE('${qn}')" style="font-size:9px;padding:2px 7px;border-radius:6px;border:1px solid rgba(255,215,0,0.3);background:transparent;color:var(--gold);cursor:pointer;">✏️</button>
+            </div>
+            ${q.inviteCode?`<div style="display:flex;align-items:center;gap:5px;">
+              <span style="font-size:9px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">🔗 ${window.location.origin+window.location.pathname}?q=${q.inviteCode}</span>
+              <button onclick="COPY_LINK('${qn}')" style="font-size:9px;padding:2px 8px;border-radius:6px;border:1px solid rgba(100,200,255,0.3);background:rgba(100,200,255,0.08);color:#7aadff;cursor:pointer;flex-shrink:0;">📋 Copiar</button>
+              <button onclick="SHARE_LINK('${qn}')" style="font-size:9px;padding:2px 8px;border-radius:6px;border:1px solid rgba(100,255,150,0.3);background:rgba(100,255,150,0.08);color:#69ff6e;cursor:pointer;flex-shrink:0;">📤 Compartir</button>
+            </div>`:''}
           </div>
           </div>
           <button class="btn btn-primary btn-sm" onclick="S.adminQ=S.adminQ==='${qn}'?null:'${qn}';render()">
@@ -2791,7 +2827,12 @@ function notifyResultSaved(matchId, h, a, isKO){
 
 // ===================== EVENTS =====================
 window.ST=t=>{S.tab=t;render();const sc=document.getElementById('sc');if(sc)sc.scrollTop=0;};
-window.LO=()=>{S.cur=null;S.admin=false;S.isCoadmin=false;S.coadminPw=null;S.adminQ=null;S.tab='grupos';S._loginStep=null;S._loginData=null;render();};
+window.LO=()=>{
+  try{localStorage.removeItem('q2026_session');}catch(e){}
+  S.cur=null;S.admin=false;S.isCoadmin=false;S.coadminPw=null;S.adminQ=null;
+  S.tab='grupos';S._loginStep=null;S._loginData=null;S._urlCode=null;
+  render();
+};
 window.DL=()=>{
   // Step 1: validate name + invite code, then branch to pin flow
   const name=(document.getElementById('ln')||{}).value.trim();
@@ -2835,6 +2876,8 @@ window.DL_SETPIN=()=>{
   const q=S.quinielas[qName];
   if(!q.users[name]) q.users[name]={preds:{},kopreds:{},locked:false,kolocked:false};
   q.users[name].pin=pin1;
+  // Save session to localStorage
+  try{ localStorage.setItem('q2026_session',JSON.stringify({name,qName,pin:pin1})); }catch(e){}
   S._loginStep=null; S._loginData=null;
   S.cur={name,quinielaName:qName};
   S.tab='grupos';
@@ -2847,6 +2890,8 @@ window.DL_CHECKPIN=()=>{
   const q=S.quinielas[qName];
   const stored=q&&q.users[name]&&q.users[name].pin;
   if(entered!==stored){showErr('PIN incorrecto. Inténtalo de nuevo.');return;}
+  // Save session to localStorage so next visit skips name+code
+  try{ localStorage.setItem('q2026_session',JSON.stringify({name,qName,pin:stored})); }catch(e){}
   S._loginStep=null; S._loginData=null;
   S.cur={name,quinielaName:qName};
   S.tab='grupos';
@@ -2886,6 +2931,27 @@ window.CREATE_Q=()=>{
 window.REGEN_CODE=()=>{
   const el=document.getElementById('nqcode');
   if(el) el.value=genCode();
+};
+
+window.COPY_LINK=(qn)=>{
+  const q=getQ(qn);if(!q||!q.inviteCode) return;
+  const url=window.location.origin+window.location.pathname+'?q='+q.inviteCode;
+  navigator.clipboard.writeText(url).then(()=>{
+    showToast('📋 Link copiado al portapapeles','info');
+  }).catch(()=>{
+    prompt('Copia este link:',url);
+  });
+};
+
+window.SHARE_LINK=(qn)=>{
+  const q=getQ(qn);if(!q||!q.inviteCode) return;
+  const url=window.location.origin+window.location.pathname+'?q='+q.inviteCode;
+  const text='¡Únete a la quiniela "'+qn+'" del Mundial 2026! 🏆\n\nEntra aquí: '+url+'\n\nTu código: '+q.inviteCode;
+  if(navigator.share){
+    navigator.share({title:'Quiniela Mundial 2026 — '+qn,text,url}).catch(()=>{});
+  } else {
+    navigator.clipboard.writeText(text).then(()=>showToast('📋 Mensaje copiado','info')).catch(()=>prompt('Copia este mensaje:',text));
+  }
 };
 
 window.CHANGE_Q_CODE=async(qName)=>{
