@@ -2383,10 +2383,10 @@ function buildAdminQSelector(activeTab){
           const stats=calcStats(u.preds||{},u.kopreds||{});
           return `<div style="display:flex;align-items:center;gap:7px;padding:7px 8px;background:rgba(255,255,255,0.03);border-radius:8px;margin-bottom:5px;border:1px solid rgba(255,255,255,0.07);">
             <span style="font-size:16px;">${u.locked?'🔒':'✏️'}</span>
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:12px;font-weight:700;">${n}</div>
+              <div style="flex:1;min-width:0;cursor:pointer;" onclick="ADMIN_VIEW_PROFILE('${n}','${qn}')">
+                <div style="font-size:12px;font-weight:700;color:var(--gold);text-decoration:underline dotted;">${n}</div>
               <div style="font-size:9px;color:var(--muted);">${u.locked?stats.total+'pts · '+stats.exact+'✅ '+stats.winner+'✔':Object.values(u.preds||{}).filter(p=>p&&p.h!=='').length+'/'+TOTAL+' capturados'}</div>
-            </div>
+              </div>
             <div style="display:flex;flex-direction:column;gap:3px;">
               ${u.locked?`<button class="btn btn-secondary btn-sm" onclick="UU('${n}')" title="Desbloquear grupos">🔓</button>`:''}
               <button class="btn btn-secondary btn-sm" onclick="RESET_PIN('${n}','${qn}')" title="Resetear PIN">🔑</button>
@@ -2408,18 +2408,7 @@ function buildAdminQSelector(activeTab){
           <div style="flex:1;">
             <div style="font-size:14px;font-weight:800;color:${isSelected?'var(--gold)':'#fff'}">${qn}</div>
             <div style="font-size:10px;color:var(--muted);margin-top:2px;">${cnt} participantes · ${locked} confirmados · $${(q.prize||0).toLocaleString()} c/u</div>
-          <div style="margin-top:6px;background:rgba(255,215,0,0.06);border:1px solid rgba(255,215,0,0.2);border-radius:8px;padding:7px 10px;">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-              <span style="font-size:10px;color:rgba(255,215,0,0.7);">🔑 Código:</span>
-              <span style="font-family:monospace;font-size:14px;font-weight:800;color:var(--gold);letter-spacing:3px;">${q.inviteCode||'—'}</span>
-              <button onclick="CHANGE_Q_CODE('${qn}')" style="font-size:9px;padding:2px 7px;border-radius:6px;border:1px solid rgba(255,215,0,0.3);background:transparent;color:var(--gold);cursor:pointer;">✏️</button>
-            </div>
-            ${q.inviteCode?`<div style="display:flex;align-items:center;gap:5px;">
-              <span style="font-size:9px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">🔗 ${window.location.origin+window.location.pathname}?q=${q.inviteCode}</span>
-              <button onclick="COPY_LINK('${qn}')" style="font-size:9px;padding:2px 8px;border-radius:6px;border:1px solid rgba(100,200,255,0.3);background:rgba(100,200,255,0.08);color:#7aadff;cursor:pointer;flex-shrink:0;">📋 Copiar</button>
-              <button onclick="SHARE_LINK('${qn}')" style="font-size:9px;padding:2px 8px;border-radius:6px;border:1px solid rgba(100,255,150,0.3);background:rgba(100,255,150,0.08);color:#69ff6e;cursor:pointer;flex-shrink:0;">📤 Compartir</button>
-            </div>`:''}
-          </div>
+
           </div>
           <button class="btn btn-primary btn-sm" onclick="S.adminQ=S.adminQ==='${qn}'?null:'${qn}';render()">
             ${isSelected?'▲ Cerrar':'▼ Gestionar'}
@@ -2433,13 +2422,7 @@ function buildAdminQSelector(activeTab){
       <div class="card-title">➕ Crear nueva quiniela</div>
       <div class="ig"><label>Nombre de la quiniela</label><input type="text" id="nqn" placeholder="Ej: Oficina, Familia, Amigos..." maxlength="40" /></div>
       <div class="ig"><label>Aportación por persona ($)</label><input type="number" id="nqp" value="100" min="0" max="100000" inputmode="numeric" /></div>
-      <div class="ig">
-        <label>Código de invitación <span style="color:var(--muted);font-weight:400;">(los participantes lo usan para entrar)</span></label>
-        <div style="display:flex;gap:6px;">
-          <input type="text" id="nqcode" placeholder="Ej: MUNDIAL26" maxlength="10" style="flex:1;text-transform:uppercase;font-family:monospace;font-size:15px;letter-spacing:2px;" />
-          <button onclick="REGEN_CODE()" class="btn btn-secondary" style="white-space:nowrap;flex-shrink:0;">🔀 Generar</button>
-        </div>
-      </div>
+
       <button class="btn btn-success btn-full" onclick="CREATE_Q()">Crear quiniela ✨</button>
     </div>`:''}
   </div>`;
@@ -2754,7 +2737,7 @@ window.VIEW_PROFILE=function(playerName, qName){
           <tbody>${koRows}</tbody>
         </table>
       </div>`:'<div style="padding:12px;font-size:11px;color:var(--muted);text-align:center;">⏳ Fase eliminatoria aún no bloqueada</div>'}
-      <div style="padding:12px;display:flex;gap:8px;justify-content:center;">
+      <div data-profile-footer style="padding:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
         <button onclick="SHARE_CARD('${playerName}','${qName}')" class="btn btn-primary" style="flex:1;">📤 Compartir</button>
         <button onclick="EXPORT_MY_PDF('${playerName}','${qName}')" class="btn btn-secondary" style="flex:1;">📄 PDF</button>
         <button onclick="document.getElementById('profile-modal').remove()" class="btn btn-secondary">✕ Cerrar</button>
@@ -2873,54 +2856,19 @@ window.DA=()=>{
   }
   else showErr('Contraseña incorrecta');
 };
-// Generate a random 6-char invite code
-function genCode(){ return Math.random().toString(36).slice(2,8).toUpperCase(); }
-
 window.CREATE_Q=()=>{
   const name=(document.getElementById('nqn')||{}).value||'';
   const prize=parseInt((document.getElementById('nqp')||{}).value)||100;
-  const codeEl=document.getElementById('nqcode');
   const qName=name.trim();
   if(!qName){alert('Ingresa un nombre para la quiniela');return;}
   if(S.quinielas[qName]){alert('Ya existe una quiniela con ese nombre');return;}
-  const inviteCode=(codeEl&&codeEl.value.trim())||genCode();
-  S.quinielas[qName]={users:{},prize,inviteCode:inviteCode.toUpperCase()};
+  S.quinielas[qName]={users:{},prize};
   saveNow().then(()=>render());
 };
 
-window.REGEN_CODE=()=>{
-  const el=document.getElementById('nqcode');
-  if(el) el.value=genCode();
-};
 
-window.COPY_LINK=(qn)=>{
-  const q=getQ(qn);if(!q||!q.inviteCode) return;
-  const url=window.location.origin+window.location.pathname+'?q='+q.inviteCode;
-  navigator.clipboard.writeText(url).then(()=>{
-    showToast('📋 Link copiado al portapapeles','info');
-  }).catch(()=>{
-    prompt('Copia este link:',url);
-  });
-};
 
-window.SHARE_LINK=(qn)=>{
-  const q=getQ(qn);if(!q||!q.inviteCode) return;
-  const url=window.location.origin+window.location.pathname+'?q='+q.inviteCode;
-  const text='¡Únete a la quiniela "'+qn+'" del Mundial 2026! 🏆\n\nEntra aquí: '+url+'\n\nTu código: '+q.inviteCode;
-  if(navigator.share){
-    navigator.share({title:'Quiniela Mundial 2026 — '+qn,text,url}).catch(()=>{});
-  } else {
-    navigator.clipboard.writeText(text).then(()=>showToast('📋 Mensaje copiado','info')).catch(()=>prompt('Copia este mensaje:',text));
-  }
-};
 
-window.CHANGE_Q_CODE=async(qName)=>{
-  const newCode=prompt('Nuevo código de invitación para "'+qName+'" (deja vacío para generar uno):');
-  const code=newCode&&newCode.trim()?newCode.trim().toUpperCase():genCode();
-  if(S.quinielas[qName]) S.quinielas[qName].inviteCode=code;
-  await saveNow(); render();
-  alert('Nuevo código: '+code);
-};
 // ── Co-admin management — dedicated page ─────────────────────────────────────
 function buildCoAdminSection(){ return ''; } // no longer shown inside users
 
@@ -3134,9 +3082,32 @@ window.SAKR=btn=>{
 window.SVP=()=>{const v=parseInt(document.getElementById('pinput').value)||0;const q=S.adminQ?getQ(S.adminQ):null;if(q)q.prize=v;save();render();};
 window.UU=n=>{if(confirm(`¿Desbloquear grupos de ${n}?`)){const q=S.adminQ?getQ(S.adminQ):null;if(q&&q.users[n]){q.users[n].locked=false;saveNow().then(()=>render());}}};
 window.RESET_PIN=(n,qn)=>{
-  if(!confirm(`¿Resetear el PIN de ${n}? La próxima vez que entre deberá crear uno nuevo.`)) return;
+  if(!confirm('¿Resetear el PIN de '+n+'? La próxima vez que entre tendrá que crear uno nuevo.')) return;
   const q=getQ(qn);
-  if(q&&q.users[n]){ delete q.users[n].pin; saveNow().then(()=>render()); showToast('🔑 PIN reseteado de '+n,'info'); }
+  if(q&&q.users[n]){
+    delete q.users[n].pin;
+    saveNow().then(()=>render());
+    showToast('🔑 PIN reseteado: '+n+' deberá crear uno nuevo al entrar','info',4000);
+  }
+};
+
+// Admin view profile — opens VIEW_PROFILE modal with reset PIN option
+window.ADMIN_VIEW_PROFILE=(n,qn)=>{
+  VIEW_PROFILE(n,qn);
+  // After modal opens, inject a Reset PIN button into the footer
+  setTimeout(()=>{
+    const modal=document.getElementById('profile-modal');
+    if(!modal) return;
+    const footer=modal.querySelector('[data-profile-footer]');
+    if(footer){
+      const btn=document.createElement('button');
+      btn.className='btn btn-secondary';
+      btn.style.cssText='flex:1;border-color:rgba(255,100,100,0.4);color:#ff8a8a;';
+      btn.textContent='🔑 Resetear PIN';
+      btn.onclick=()=>{ RESET_PIN(n,qn); modal.remove(); };
+      footer.insertBefore(btn,footer.lastElementChild);
+    }
+  },100);
 };
 
 // ── Co-admin management ──────────────────────────────────────────────────────
