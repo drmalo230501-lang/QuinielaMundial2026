@@ -489,30 +489,6 @@ async function load(){
     }
   }catch(e){ console.error('Error cargando datos:',e); }
 
-  // ── Auto-login from localStorage ──────────────────────────────────────────
-  try{
-    const saved=localStorage.getItem('q2026_session');
-    if(saved){
-      const sess=JSON.parse(saved);
-      // Verify user still exists and PIN matches
-      const q=S.quinielas[sess.qName];
-      if(q&&q.users[sess.name]&&q.users[sess.name].pin===sess.pin){
-        S.cur={name:sess.name,quinielaName:sess.qName};
-        S.tab='grupos';
-        render();
-        return;
-      } else {
-        localStorage.removeItem('q2026_session');
-      }
-    }
-  }catch(e){}
-
-  // ── Read ?q=CODE from URL to pre-fill invite code ─────────────────────────
-  try{
-    const urlCode=new URLSearchParams(window.location.search).get('q');
-    if(urlCode) S._urlCode=urlCode.toUpperCase();
-  }catch(e){}
-
   render();
 }
 let _saveTimer=null;
@@ -1602,34 +1578,33 @@ function buildBracket(){
 
 function buildLogin(){
   const step=S._loginStep||'enter';
-
   const header=`<div class="header"><span class="trophy">🏆</span><h1>Quiniela Mundial 2026</h1><p>🇺🇸 USA · 🇲🇽 México · 🇨🇦 Canadá</p></div>`;
 
-  // ── STEP 1: Name + invite code ──────────────────────────────────────────────
+  // ── STEP 1: Name + quiniela selector ───────────────────────────────────────
   if(step==='enter'){
+    const qNames=Object.keys(S.quinielas).filter(k=>k!=='__results__'&&k!=='__coadmins__');
+    const qOptions=qNames.map(q=>`<option value="${q}">${q}</option>`).join('');
     return header+`<div style="padding:10px;">
       <div class="card" style="margin:0 0 10px;">
-        <h2 style="text-align:center;margin-bottom:6px;color:var(--gold);font-size:17px;">⚽ Entrar a la Quiniela</h2>
-        <p style="text-align:center;font-size:11px;color:var(--muted);margin-bottom:16px;">Ingresa tu nombre y el código que te compartió el organizador</p>
+        <h2 style="text-align:center;margin-bottom:14px;color:var(--gold);font-size:17px;">⚽ Entrar a la Quiniela</h2>
         <div class="ig">
           <label>Tu nombre</label>
           <input type="text" id="ln" placeholder="Ej: Juan García" maxlength="30"
-            onkeydown="if(event.key==='Enter')document.getElementById('lcode').focus()" />
+            onkeydown="if(event.key==='Enter')${qNames.length>0?"document.getElementById('lq').focus()":"DL()"}" />
         </div>
         <div class="ig">
-          <label>Código de la quiniela</label>
-          <input type="text" id="lcode" placeholder="Ej: MUNDIAL26" maxlength="10"
-            value="${S._urlCode||''}"
-            style="text-transform:uppercase;font-family:monospace;font-size:16px;letter-spacing:3px;text-align:center;"
-            onkeydown="if(event.key==='Enter')DL()" />
-          ${S._urlCode?'<div style="font-size:10px;color:#69ff6e;margin-top:4px;">✅ Código detectado automáticamente</div>':''}
+          <label>Tu quiniela</label>
+          ${qNames.length>0
+            ?`<select id="lq" style="width:100%;padding:12px 14px;background:var(--card2);border:1px solid var(--border);border-radius:10px;color:#fff;font-size:15px;outline:none;appearance:none;">${qOptions}</select>`
+            :`<input type="text" id="lq" placeholder="Nombre de la quiniela" maxlength="40" />`}
         </div>
-        <button class="btn btn-primary btn-full" onclick="DL()" style="font-size:15px;padding:13px;">Entrar 🚀</button>
+        <button class="btn btn-primary btn-full" onclick="DL()" style="font-size:15px;padding:13px;">Continuar →</button>
         <hr class="sep"/>
         <div class="ig"><label>Contraseña de administrador</label><input type="password" id="ap2" placeholder="••••••••" onkeydown="if(event.key==='Enter')DA()" /></div>
         <button class="btn btn-secondary btn-full" onclick="DA()" style="border-color:rgba(255,215,0,0.4);color:var(--gold);">Acceso admin ⚙️</button>
         <div id="lerr" style="margin-top:8px;"></div>
       </div>
+      ${qNames.length===0?`<div class="alert alert-w">⚠️ Aún no hay quinielas creadas. El administrador debe crear una primero.</div>`:''}
     </div>`;
   }
 
@@ -1639,7 +1614,7 @@ function buildLogin(){
     return header+`<div style="padding:10px;">
       <div class="card">
         <div style="text-align:center;margin-bottom:16px;">
-          <div style="font-size:32px;margin-bottom:8px;">👋</div>
+          <div style="font-size:36px;margin-bottom:8px;">👋</div>
           <div style="font-size:16px;font-weight:800;color:var(--gold);">¡Bienvenido, ${d.name}!</div>
           <div style="font-size:11px;color:var(--muted);margin-top:4px;">Primera vez en <strong style="color:#fff">${d.qName}</strong></div>
         </div>
@@ -1647,13 +1622,13 @@ function buildLogin(){
         <div class="ig">
           <label>Elige tu PIN (4 dígitos)</label>
           <input type="password" id="pin1" placeholder="••••" maxlength="4" inputmode="numeric" pattern="[0-9]*"
-            style="text-align:center;font-size:24px;letter-spacing:8px;"
+            style="text-align:center;font-size:28px;letter-spacing:10px;"
             onkeydown="if(event.key==='Enter')document.getElementById('pin2').focus()" />
         </div>
         <div class="ig">
           <label>Confirma tu PIN</label>
           <input type="password" id="pin2" placeholder="••••" maxlength="4" inputmode="numeric" pattern="[0-9]*"
-            style="text-align:center;font-size:24px;letter-spacing:8px;"
+            style="text-align:center;font-size:28px;letter-spacing:10px;"
             onkeydown="if(event.key==='Enter')DL_SETPIN()" />
         </div>
         <button class="btn btn-success btn-full" onclick="DL_SETPIN()" style="font-size:15px;padding:13px;">Crear PIN y entrar 🔐</button>
@@ -1663,13 +1638,13 @@ function buildLogin(){
     </div>`;
   }
 
-  // ── STEP 3: Returning user — check PIN ─────────────────────────────────────
+  // ── STEP 3: Returning user — enter PIN ─────────────────────────────────────
   if(step==='checkpin'){
     const d=S._loginData||{};
     return header+`<div style="padding:10px;">
       <div class="card">
         <div style="text-align:center;margin-bottom:16px;">
-          <div style="font-size:32px;margin-bottom:8px;">🔐</div>
+          <div style="font-size:36px;margin-bottom:8px;">🔐</div>
           <div style="font-size:16px;font-weight:800;color:var(--gold);">${d.name}</div>
           <div style="font-size:11px;color:var(--muted);margin-top:4px;">Quiniela: <strong style="color:#fff">${d.qName}</strong></div>
         </div>
@@ -1682,12 +1657,12 @@ function buildLogin(){
         <button class="btn btn-primary btn-full" onclick="DL_CHECKPIN()" style="font-size:15px;padding:13px;">Entrar 🚀</button>
         <button class="btn btn-secondary btn-full" onclick="S._loginStep='enter';S._loginData=null;render()" style="margin-top:6px;">← No soy yo</button>
         <div id="lerr" style="margin-top:8px;"></div>
-        <div style="margin-top:12px;text-align:center;font-size:10px;color:var(--muted);">¿Olvidaste tu PIN? Pide al administrador que te desbloquee.</div>
+        <div style="margin-top:12px;text-align:center;font-size:10px;color:var(--muted);">¿Olvidaste tu PIN? Pide al administrador que te resetee.</div>
       </div>
     </div>`;
   }
 
-  return header+'<div style="padding:20px;text-align:center;color:var(--muted);">Cargando...</div>';
+  return header+'';
 }
 
 // ===================== GRUPOS =====================
@@ -2828,34 +2803,23 @@ function notifyResultSaved(matchId, h, a, isKO){
 // ===================== EVENTS =====================
 window.ST=t=>{S.tab=t;render();const sc=document.getElementById('sc');if(sc)sc.scrollTop=0;};
 window.LO=()=>{
-  try{localStorage.removeItem('q2026_session');}catch(e){}
   S.cur=null;S.admin=false;S.isCoadmin=false;S.coadminPw=null;S.adminQ=null;
-  S.tab='grupos';S._loginStep=null;S._loginData=null;S._urlCode=null;
+  S.tab='grupos';S._loginStep=null;S._loginData=null;
   render();
 };
 window.DL=()=>{
-  // Step 1: validate name + invite code, then branch to pin flow
   const name=(document.getElementById('ln')||{}).value.trim();
-  const code=(document.getElementById('lcode')||{}).value.trim().toUpperCase();
+  const qEl=document.getElementById('lq');
+  const qName=(qEl?qEl.value:'').trim();
   if(!name){showErr('Por favor ingresa tu nombre');return;}
-  if(!code){showErr('Ingresa el código de tu quiniela');return;}
-
-  // Find quiniela by invite code
-  const qName=Object.keys(S.quinielas).find(k=>{
-    const q=S.quinielas[k];
-    return q.inviteCode&&q.inviteCode.toUpperCase()===code;
-  });
-  if(!qName){showErr('Código incorrecto. Verifica con tu organizador.');return;}
+  if(!qName){showErr('Selecciona tu quiniela');return;}
+  if(!S.quinielas[qName]){showErr('Esa quiniela no existe.');return;}
 
   const q=S.quinielas[qName];
   S._loginData={name,qName};
 
-  if(!q.users[name]){
-    // New user → ask to create PIN
-    S._loginStep='newpin';
-    render();
-  } else if(!q.users[name].pin){
-    // Existing user without PIN (migration) → ask to set one
+  if(!q.users[name]||!q.users[name].pin){
+    // New user or no PIN yet → create PIN
     S._loginStep='newpin';
     render();
   } else {
@@ -2876,8 +2840,6 @@ window.DL_SETPIN=()=>{
   const q=S.quinielas[qName];
   if(!q.users[name]) q.users[name]={preds:{},kopreds:{},locked:false,kolocked:false};
   q.users[name].pin=pin1;
-  // Save session to localStorage
-  try{ localStorage.setItem('q2026_session',JSON.stringify({name,qName,pin:pin1})); }catch(e){}
   S._loginStep=null; S._loginData=null;
   S.cur={name,quinielaName:qName};
   S.tab='grupos';
@@ -2890,8 +2852,6 @@ window.DL_CHECKPIN=()=>{
   const q=S.quinielas[qName];
   const stored=q&&q.users[name]&&q.users[name].pin;
   if(entered!==stored){showErr('PIN incorrecto. Inténtalo de nuevo.');return;}
-  // Save session to localStorage so next visit skips name+code
-  try{ localStorage.setItem('q2026_session',JSON.stringify({name,qName,pin:stored})); }catch(e){}
   S._loginStep=null; S._loginData=null;
   S.cur={name,quinielaName:qName};
   S.tab='grupos';
