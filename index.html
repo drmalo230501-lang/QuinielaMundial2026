@@ -8,12 +8,35 @@
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#07071a;color:#fff;min-height:100vh;overscroll-behavior:none;transition:background .3s,color .3s;}
 body.light-mode{background:#f0f2f8;color:#111;}
-body.light-mode :root,body.light-mode{--card:#ffffff;--card2:#e8eaf6;--border:rgba(0,0,0,0.12);--muted:rgba(0,0,0,0.5);}
+body.light-mode :root,body.light-mode{--card:#ffffff;--card2:#e8eaf6;--border:rgba(0,0,0,0.15);--muted:rgba(0,0,0,0.55);}
 body.light-mode .header{background:linear-gradient(180deg,#1a1a6e,#0d0d40);}
-body.light-mode .bnav{background:#fff;border-top:1px solid rgba(0,0,0,0.1);}
-body.light-mode .score-inp{background:#f0f2f8;color:#1a1a6e;border-color:#1a1a6e;}
+body.light-mode .bnav{background:#fff;border-top:1px solid rgba(0,0,0,0.12);box-shadow:0 -2px 10px rgba(0,0,0,0.08);}
+body.light-mode .bnav-btn{color:rgba(0,0,0,0.45);}
+body.light-mode .bnav-btn.active{color:#1a1a6e;}
+body.light-mode .score-inp{background:#e8eaf6;color:#1a1a6e;border-color:rgba(26,26,110,0.3);}
 body.light-mode .ig input,body.light-mode .ig select,body.light-mode .ig textarea{background:#fff;color:#111;border-color:rgba(0,0,0,0.2);}
-body.light-mode .mcard{box-shadow:0 1px 4px rgba(0,0,0,0.1);}
+body.light-mode .mcard{background:#fff;box-shadow:0 1px 6px rgba(0,0,0,0.1);border-color:rgba(0,0,0,0.1);}
+body.light-mode .mcard .team-name{color:#111;}
+body.light-mode .card{background:#fff;border-color:rgba(0,0,0,0.1);}
+body.light-mode .card-title{color:#1a1a6e;}
+body.light-mode .grp-badge{color:#1a1a6e;background:rgba(26,26,110,0.08);}
+body.light-mode .rank-table td,.light-mode .rank-table th{color:#111;}
+body.light-mode .rank-table .top1{background:rgba(255,215,0,0.15);}
+body.light-mode .rank-table .top2{background:rgba(100,150,255,0.1);}
+body.light-mode .rank-table .top3{background:rgba(180,100,50,0.1);}
+body.light-mode .ko-match{background:#fff;border-color:rgba(0,0,0,0.1);}
+body.light-mode .ko-name{color:#111;}
+body.light-mode .ko-score-inp{background:#e8eaf6;color:#1a1a6e;}
+body.light-mode .win-btn{background:#e8eaf6;color:#444;border-color:rgba(0,0,0,0.15);}
+body.light-mode .win-btn.active{background:#1a1a6e;color:#fff;}
+body.light-mode .jornada-hdr h3{color:#1a1a6e;}
+body.light-mode .res-card{background:#fff;border-color:rgba(0,0,0,0.1);}
+body.light-mode .res-score-val{color:#1a1a6e;}
+body.light-mode .std-card{background:#fff;border-color:rgba(0,0,0,0.1);}
+body.light-mode .instr-block{border-color:rgba(0,0,0,0.08);}
+body.light-mode .instr-block h3{color:#1a1a6e;}
+body.light-mode .bs{color:#111;}
+body.light-mode .alert-w{background:rgba(255,193,7,0.15);color:#6d4c00;}
 :root{
   --gold:#FFD700;--green:#00C853;--red:#C62828;--blue:#1a6ef5;
   --card:#10103a;--card2:#181860;--border:rgba(255,255,255,0.13);--muted:rgba(255,255,255,0.5);
@@ -1336,20 +1359,23 @@ function calcStats(preds, kopreds){
 }
 function getRanking(quinielaName){
   const q=getQ(quinielaName); if(!q) return [];
-  const ranked=Object.entries(q.users||{}).filter(([,u])=>u.locked)
-    .map(([n,u])=>({n,...calcStats(u.preds||{},u.kopreds||{})}))
+  // Locked users with stats first, then unlocked users with 0 pts at bottom
+  const lockedUsers=Object.entries(q.users||{}).filter(([,u])=>u.locked)
+    .map(([n,u])=>({n,...calcStats(u.preds||{},u.kopreds||{}),locked:true}))
     .sort((a,b)=>b.total-a.total||b.exact-a.exact);
-  // Store prev ranking snapshot in memory for arrows
+  const unlockedUsers=Object.entries(q.users||{}).filter(([,u])=>!u.locked)
+    .map(([n,u])=>({n,total:0,exact:0,winner:0,miss:0,played:0,locked:false,arrow:'new'}))
+    .sort((a,b)=>a.n.localeCompare(b.n));
+  const ranked=[...lockedUsers,...unlockedUsers];
+  // Position arrows only for locked users
   if(!window._prevRank) window._prevRank={};
   const prev=window._prevRank[quinielaName]||{};
-  ranked.forEach((u,i)=>{
+  lockedUsers.forEach((u,i)=>{
     const prevPos=prev[u.n];
-    u.arrow = prevPos===undefined?'new':prevPos>i?'up':prevPos<i?'down':'same';
-    u.prevPos=prevPos;
+    u.arrow=prevPos===undefined?'new':prevPos>i?'up':prevPos<i?'down':'same';
   });
-  // Update snapshot after current results
   const snap={};
-  ranked.forEach((u,i)=>snap[u.n]=i);
+  lockedUsers.forEach((u,i)=>snap[u.n]=i);
   window._prevRank[quinielaName]=snap;
   return ranked;
 }
@@ -2215,19 +2241,25 @@ function buildRanking(){
       </tr></thead>
       <tbody>
       ${rank.length===0?`<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px;">Sin participantes guardados</td></tr>`
-      :rank.map((u,i)=>`<tr class="${i===0?'top1':i===1?'top2':i===2?'top3':''}">
-        <td style="font-size:14px;">${i<3?medals[i]:(i+1)}</td>
+      :rank.map((u,i)=>{
+        const isLocked=u.locked!==false;
+        const rowCls=isLocked?(i===0?'top1':i===1?'top2':i===2?'top3':''):'';
+        const pos=isLocked?i+1:'—';
+        const medal=isLocked&&i<3?medals[i]:null;
+        return `<tr class="${rowCls}" style="${!isLocked?'opacity:0.6;':''}">
+        <td style="font-size:14px;">${medal||pos}</td>
         <td>
           <strong style="cursor:pointer;text-decoration:underline dotted;color:var(--gold);"
-            onclick="VIEW_PROFILE('${u.n}','${qName}')">${u.n}</strong>${i===0&&rank.length>1?' 👑':''}
-          ${u.arrow==='up'?'<span style="color:#69ff6e;font-size:10px;margin-left:3px;">▲</span>':u.arrow==='down'?'<span style="color:#ff8a8a;font-size:10px;margin-left:3px;">▼</span>':u.arrow==='new'?'<span style="font-size:9px;color:var(--muted);margin-left:3px;">nuevo</span>':''}
+            onclick="VIEW_PROFILE('${u.n}','${qName}')">${u.n}</strong>${i===0&&rank.filter(x=>x.locked!==false).length>1?' 👑':''}
+          ${isLocked?(u.arrow==='up'?'<span style="color:#69ff6e;font-size:10px;margin-left:3px;">▲</span>':u.arrow==='down'?'<span style="color:#ff8a8a;font-size:10px;margin-left:3px;">▼</span>':''):'<span style="font-size:9px;color:var(--muted);margin-left:3px;">✏️ en progreso</span>'}
         </td>
-        <td class="pts-big">${u.total}</td>
-        <td><span class="bs bs-g">${u.exact}</span></td>
-        <td><span class="bs bs-y">${u.winner}</span></td>
-        <td><span class="bs bs-r">${u.miss}</span></td>
-        <td class="${i===0?'diff-zero':'diff-red'}">${i===0?'—':'-'+(topPts-u.total)}</td>
+        <td class="pts-big">${isLocked?u.total:'—'}</td>
+        <td><span class="bs bs-g">${isLocked?u.exact:'—'}</span></td>
+        <td><span class="bs bs-y">${isLocked?u.winner:'—'}</span></td>
+        <td><span class="bs bs-r">${isLocked?u.miss:'—'}</span></td>
+        <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>`;}).join('')}
         <td style="font-size:11px;">${(()=>{
+          if(u.locked===false) return '<span style="color:var(--muted)">—</span>';
           const q2=getQ(qName);
           const usr=q2&&q2.users[u.n];
           const champ=usr?getUserChampion(usr):null;
@@ -2237,7 +2269,7 @@ function buildRanking(){
           const wrong=realChamp&&champ!==realChamp;
           return `<span style="color:${correct?'#69ff6e':wrong?'#ff8a8a':'#fff'}">${F(champ)} ${champ}</span>`;
         })()}</td>
-      </tr>`).join('')}
+      </tr>`}).join('')}
       </tbody>
     </table>
     </div>
@@ -2464,7 +2496,32 @@ function buildAdminKOResults(){
     return ov ? null : algorithmTeam; // overrides handled at match level
   }
 
-  return ['D16','R16','QF','SF','3P','FIN'].map(round=>{
+  // Only show rounds where predecessor matches have results
+  const R2=getResults();
+  const realRes2=R2.results||{};
+  const playedGroupMatches=Object.values(realRes2).filter(r=>r&&r.h!==''&&r.h!==undefined).length;
+  // D16 only shows when at least some group matches have results
+  // R16 only shows when at least 1 D16 has a result
+  // QF only shows when at least 1 R16 has a result, etc.
+  const d16Results=KO_MATCHES.filter(m=>m.round==='D16').filter(m=>realKO[m.id]&&realKO[m.id].h!=='').length;
+  const r16Results=KO_MATCHES.filter(m=>m.round==='R16').filter(m=>realKO[m.id]&&realKO[m.id].h!=='').length;
+  const qfResults=KO_MATCHES.filter(m=>m.round==='QF').filter(m=>realKO[m.id]&&realKO[m.id].h!=='').length;
+  const sfResults=KO_MATCHES.filter(m=>m.round==='SF').filter(m=>realKO[m.id]&&realKO[m.id].h!=='').length;
+
+  const roundsToShow=['D16','R16','QF','SF','3P','FIN'].filter(r=>{
+    if(r==='D16') return playedGroupMatches>0; // need some group results
+    if(r==='R16') return d16Results>0;
+    if(r==='QF') return r16Results>0;
+    if(r==='SF') return qfResults>0;
+    if(r==='3P'||r==='FIN') return sfResults>0;
+    return false;
+  });
+
+  if(roundsToShow.length===0) return `<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">
+    ⏳ Los cruces de dieciseisavos aparecerán aquí cuando captures los resultados de la fase de grupos.
+  </div>`;
+
+  return roundsToShow.map(round=>{
     const ms=KO_MATCHES.filter(m=>m.round===round);
     return `<div class="ko-round-label">${ROUND_LABELS[round]}</div>
     <div style="padding:0 10px;">
@@ -3137,18 +3194,38 @@ window.SW=(id,win)=>{
   const p=u.preds[id];
   const h=parseInt(p.h)>=0?parseInt(p.h)||0:0,a=parseInt(p.a)>=0?parseInt(p.a)||0:0;
   if(win==='h'){
-    // Local wins: ensure h > a
     if(h>a){p.h=h;p.a=a;}
     else{p.h=Math.max(h,a)+1||1;p.a=Math.min(h,a)||0;}
   } else if(win==='a'){
-    // Visitante wins: ensure a > h
     if(a>h){p.h=h;p.a=a;}
     else{p.h=Math.min(h,a)||0;p.a=Math.max(h,a)+1||1;}
   } else {
-    // Empate: ensure h === a
     const v=Math.max(h,a,1);p.h=v;p.a=v;
   }
-  save();render();
+  save();
+  // Update DOM directly — no full re-render to avoid flash
+  const card=document.querySelector(`[data-match-id="${id}"]`);
+  if(card){
+    const inps=card.querySelectorAll('.score-inp');
+    if(inps[0]) inps[0].value=p.h;
+    if(inps[1]) inps[1].value=p.a;
+    const btns=card.querySelectorAll('.win-btn');
+    btns.forEach(btn=>{
+      const bw=btn.dataset.win;
+      const active=bw===win;
+      btn.classList.toggle('active',active);
+    });
+    // Update mcard color class
+    card.classList.remove('exact','winner','miss');
+    // Update progress bar
+    const filled=Object.values(u.preds).filter(x=>x&&x.h!=='').length;
+    const pf=document.getElementById('pfill');
+    if(pf) pf.style.width=Math.round((filled/TOTAL)*100)+'%';
+    const pfTxt=document.getElementById('pfill-txt');
+    if(pfTxt) pfTxt.textContent=filled+'/'+TOTAL;
+  } else {
+    render(); // fallback if card not found
+  }
 };
 window.SAVE_PROGRESS=async()=>{
   const u=curUser(); if(!u||u.locked) return;
@@ -3195,7 +3272,19 @@ window.SWKO=(id,win)=>{
     if(a>h){p.h=h;p.a=a;}
     else{p.h=Math.min(h,a)||0;p.a=Math.max(h,a)+1||1;}
   }
-  save();render();
+  save();
+  // Update DOM without re-render to avoid flash
+  const card=document.querySelector(`[data-ko-match-id="${id}"]`);
+  if(card){
+    const inps=card.querySelectorAll('.ko-score-inp');
+    if(inps[0]) inps[0].value=p.h;
+    if(inps[1]) inps[1].value=p.a;
+    card.querySelectorAll('.ko-win-btn').forEach(btn=>{
+      btn.classList.toggle('active',btn.dataset.win===win);
+    });
+  } else {
+    render();
+  }
 };
 window.LKO=()=>{
   const u=curUser();if(!u)return;
