@@ -2257,7 +2257,7 @@ function buildRanking(){
         <td><span class="bs bs-g">${isLocked?u.exact:'—'}</span></td>
         <td><span class="bs bs-y">${isLocked?u.winner:'—'}</span></td>
         <td><span class="bs bs-r">${isLocked?u.miss:'—'}</span></td>
-        <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>`}).join('')}
+         <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>
         <td style="font-size:11px;">${(()=>{
           if(u.locked===false) return '<span style="color:var(--muted)">—</span>';
           const q2=getQ(qName);
@@ -2269,7 +2269,7 @@ function buildRanking(){
           const wrong=realChamp&&champ!==realChamp;
           return `<span style="color:${correct?'#69ff6e':wrong?'#ff8a8a':'#fff'}">${F(champ)} ${champ}</span>`;
         })()}</td>
-      </tr>`}).join('')}
+     </tr>`;}).join('')}
       </tbody>
     </table>
     </div>
