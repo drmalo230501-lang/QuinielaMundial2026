@@ -1573,109 +1573,156 @@ function buildBracket(){
   const realRes=R.results||{};
   if(!user||!user.locked) return `<div style="padding:30px;text-align:center;color:var(--muted);">🔒 Bloquea tu quiniela de grupos para ver el bracket</div>`;
 
-  function renderHalf(useReal){
+  const tab=S._bracketTab||'pred';
+
+  function renderBracket(useReal){
     const gp=useReal?realRes:preds;
     const kp=useReal?realKO:kopreds;
     if(useReal&&!Object.values(realKO).some(r=>r&&r.h!==''))
-      return `<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">⏳ Sin resultados reales aún</div>`;
+      return `<div style="padding:24px;text-align:center;color:var(--muted);font-size:12px;">⏳ Sin resultados reales de eliminación aún</div>`;
 
-    function t(pos){ const v=resolveKOTeam(pos,gp,kp); return v&&v!=='?'?v:null; }
-    function sc(mid){ const r=kp[mid]; return r&&r.h!==''?`${r.h}-${r.a}`:null; }
+    function tm(pos){ const v=resolveKOTeam(pos,gp,kp); return v&&v!=='?'?v:null; }
+    function sc(mid){ const r=kp[mid]; return (r&&r.h!=='')?r.h+'-'+r.a:null; }
 
-    function card(mid, big){
-      const m=KO_MATCHES.find(x=>x.id===mid); if(!m) return '';
+    // Card sizes: sm=small(D16), md=medium(R16/QF), lg=large(SF/FIN)
+    function card(mid, size='sm'){
+      const m=KO_MATCHES.find(x=>x.id===mid); if(!m) return '<div style="width:10px"></div>';
       const score=sc(mid);
-      const rh=score?parseInt(score):null, ra=score?parseInt(score.split('-')[1]):null;
-      const w=big?128:106;
+      const rh=score!=null?parseInt(score.split('-')[0]):null;
+      const ra=score!=null?parseInt(score.split('-')[1]):null;
+      const w=size==='lg'?138:size==='md'?120:104;
+      const fs=size==='lg'?10:size==='md'?9:8;
+      const flagSz=size==='lg'?14:size==='md'?13:12;
+      const padV=size==='lg'?5:4;
+
       function row(pos,isH){
-        const team=t(pos); const wins=score&&(isH?rh>ra:ra>rh);
-        return `<div style="display:flex;align-items:center;gap:3px;padding:${big?4:3}px ${big?6:5}px;background:${wins?'rgba(255,215,0,0.12)':'transparent'};min-height:${big?20:17}px;">
-          <span style="font-size:${big?13:11}px;width:${big?16:14}px;text-align:center;flex-shrink:0;">${team?F(team):'❓'}</span>
-          <span style="font-size:${big?9.5:8}px;font-weight:${wins?800:600};color:${wins?'#FFD700':team?'#fff':'rgba(255,255,255,0.25)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">${team||'Por definir'}</span>
-          ${score?`<span style="font-size:${big?11:9}px;font-weight:800;color:${wins?'#FFD700':'rgba(255,255,255,0.4)'};flex-shrink:0;">${isH?rh:ra}</span>`:''}
+        const t=tm(pos);
+        const wins=score!=null&&(isH?rh>ra:ra>rh);
+        const name=t?t:'Por definir';
+        const shortName=name.length>12?name.slice(0,12)+'…':name;
+        return `<div style="display:flex;align-items:center;gap:3px;padding:${padV}px ${size==='lg'?7:5}px;min-height:${size==='lg'?22:18}px;background:${wins?'rgba(255,215,0,0.13)':'transparent'};">
+          <span style="font-size:${flagSz}px;width:${flagSz+3}px;text-align:center;flex-shrink:0;">${t?F(t):'❓'}</span>
+          <span style="font-size:${fs}px;font-weight:${wins?800:600};color:${wins?'#FFD700':t?'#fff':'rgba(255,255,255,0.3)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">${shortName}</span>
+          ${score!=null?`<span style="font-size:${size==='lg'?11:9}px;font-weight:800;color:${wins?'#FFD700':'rgba(255,255,255,0.4)'};flex-shrink:0;margin-left:2px;">${isH?rh:ra}</span>`:''}
         </div>`;
       }
-      return `<div style="width:${w}px;flex-shrink:0;background:rgba(255,255,255,0.05);border:1px solid ${score?'rgba(255,215,0,0.4)':'rgba(255,255,255,0.1)'};border-radius:7px;overflow:hidden;">
-        <div style="font-size:7px;color:var(--muted);padding:1px 5px;background:rgba(0,0,0,0.25);white-space:nowrap;">${m.label}</div>
+
+      return `<div style="width:${w}px;flex-shrink:0;background:rgba(255,255,255,0.05);border:1px solid ${score?'rgba(255,215,0,0.4)':'rgba(255,255,255,0.1)'};border-radius:8px;overflow:hidden;">
+        <div style="font-size:7px;color:var(--muted);padding:2px 5px;background:rgba(0,0,0,0.3);letter-spacing:.3px;">${m.label}</div>
         ${row(m.hPos,true)}
         <div style="height:1px;background:rgba(255,255,255,0.08);"></div>
         ${row(m.aPos,false)}
       </div>`;
     }
 
-    // Brace connectors
-    function brR(n){ // right-pointing brace (left side of bracket)
-      let s='';
-      for(let i=0;i<n;i+=2) s+=`<div style="flex:1;display:flex;flex-direction:column;"><div style="flex:1;border-right:1px solid rgba(255,215,0,0.25);border-bottom:1px solid rgba(255,215,0,0.25);border-radius:0 0 3px 0;"></div><div style="flex:1;border-right:1px solid rgba(255,215,0,0.25);border-top:1px solid rgba(255,215,0,0.25);border-radius:0 3px 0 0;"></div></div>`;
-      return `<div style="width:8px;flex-shrink:0;display:flex;flex-direction:column;align-self:stretch;">${s}</div>`;
+    // Brace connector: right side (left half of bracket)
+    function brR(pairs){
+      let segs='';
+      for(let i=0;i<pairs;i++) segs+=`
+        <div style="flex:1;border-right:1px solid rgba(255,215,0,0.22);border-bottom:1px solid rgba(255,215,0,0.22);border-radius:0 0 3px 0;"></div>
+        <div style="flex:1;border-right:1px solid rgba(255,215,0,0.22);border-top:1px solid rgba(255,215,0,0.22);border-radius:0 3px 0 0;"></div>`;
+      return `<div style="width:8px;flex-shrink:0;align-self:stretch;display:flex;flex-direction:column;">${segs}</div>`;
     }
-    function brL(n){ // left-pointing brace (right side of bracket)
-      let s='';
-      for(let i=0;i<n;i+=2) s+=`<div style="flex:1;display:flex;flex-direction:column;"><div style="flex:1;border-left:1px solid rgba(255,215,0,0.25);border-bottom:1px solid rgba(255,215,0,0.25);border-radius:0 0 0 3px;"></div><div style="flex:1;border-left:1px solid rgba(255,215,0,0.25);border-top:1px solid rgba(255,215,0,0.25);border-radius:3px 0 0 0;"></div></div>`;
-      return `<div style="width:8px;flex-shrink:0;display:flex;flex-direction:column;align-self:stretch;">${s}</div>`;
+    // Brace connector: left side (right half of bracket)
+    function brL(pairs){
+      let segs='';
+      for(let i=0;i<pairs;i++) segs+=`
+        <div style="flex:1;border-left:1px solid rgba(255,215,0,0.22);border-bottom:1px solid rgba(255,215,0,0.22);border-radius:0 0 0 3px;"></div>
+        <div style="flex:1;border-left:1px solid rgba(255,215,0,0.22);border-top:1px solid rgba(255,215,0,0.22);border-radius:3px 0 0 0;"></div>`;
+      return `<div style="width:8px;flex-shrink:0;align-self:stretch;display:flex;flex-direction:column;">${segs}</div>`;
     }
-    function hLine(){ return `<div style="width:8px;flex-shrink:0;border-top:1px solid rgba(255,215,0,0.25);align-self:center;"></div>`; }
+    function hL(){ return `<div style="width:8px;flex-shrink:0;align-self:center;border-top:1px solid rgba(255,215,0,0.22);"></div>`; }
 
-    function col(ids,big,gap='6px'){
+    // Column of matches evenly distributed vertically
+    function col(ids,size,gap='4px'){
       return `<div style="display:flex;flex-direction:column;gap:${gap};justify-content:space-around;align-self:stretch;">
-        ${ids.map(id=>`<div style="flex:1;display:flex;align-items:center;">${card(id,big)}</div>`).join('')}
+        ${ids.map(id=>`<div style="flex:1;display:flex;align-items:center;">${card(id,size)}</div>`).join('')}
       </div>`;
     }
 
-    // Official bracket layout from FIFA image:
-    // LEFT PATHWAY 1: p74,p77,p73,p75 → p89,p90 → p97 → p101 → FINAL p104
-    // LEFT PATHWAY 2: p83,p84,p81,p82 → p93,p94 → p98 ↗
-    // RIGHT PATHWAY 1: p76,p78,p79,p80 → p91,p92 → p99 → p102 → FINAL p104
-    // RIGHT PATHWAY 2: p86,p88,p85,p87 → p95,p96 → p100 ↗
     const fin=KO_MATCHES.find(m=>m.round==='FIN');
     const bronze=KO_MATCHES.find(m=>m.round==='3P');
 
-    return `<div style="display:inline-flex;align-items:stretch;gap:0;min-width:820px;height:600px;padding:8px;">
-      <!-- LEFT D16 PATHWAY 1+2 -->
-      ${col(['p74','p77','p73','p75','p83','p84','p81','p82'],false,'3px')}
-      ${brR(8)}
-      <!-- LEFT R16 -->
-      ${col(['p89','p90','p93','p94'],false,'6px')}
+    // Bracket layout matching the FIFA image exactly:
+    // LEFT PATHWAY 1: p74,p77 (top)  ┐
+    //                 p73,p75 (mid-top)┘→ p89,p90 → p97 ┐
+    // LEFT PATHWAY 2: p83,p84 (mid-bot)┐                  → p101 ┐
+    //                 p81,p82 (bottom) ┘→ p93,p94 → p98 ┘         → FINAL p104
+    // RIGHT mirror:                                        → p102 ┘
+    //   p76,p78 → p91 → p99 ┐
+    //   p79,p80 → p92         → p102
+    //   p86,p88 → p95 → p100 ┐
+    //   p85,p87 → p96
+
+    return `<div style="display:inline-flex;align-items:stretch;min-width:880px;height:640px;padding:10px 6px;">
+
+      <!-- ══ LEFT SIDE ══ -->
+      <!-- D16 left (8 matches) -->
+      ${col(['p74','p77','p73','p75','p83','p84','p81','p82'],'sm','2px')}
+      <!-- brace 8→4 -->
       ${brR(4)}
-      <!-- LEFT QF -->
-      ${col(['p97','p98'],true,'20px')}
+      <!-- R16 left (4 matches) -->
+      ${col(['p89','p90','p93','p94'],'sm','6px')}
+      <!-- brace 4→2 -->
       ${brR(2)}
-      <!-- LEFT SF -->
-      <div style="display:flex;align-items:center;">${card('p101',true)}</div>
-      ${hLine()}
-      <!-- CENTER: FINAL + BRONZE -->
-      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;flex-shrink:0;">
-        <div style="font-size:9px;font-weight:800;color:#FFD700;text-align:center;letter-spacing:1px;">🏆 FINAL</div>
-        ${card(fin?fin.id:'',true)}
-        <div style="font-size:8px;color:var(--muted);text-align:center;margin-top:6px;">🥉 3er Lugar</div>
-        ${card(bronze?bronze.id:'',false)}
+      <!-- QF left (2 matches) -->
+      ${col(['p97','p98'],'md','20px')}
+      <!-- brace 2→1 -->
+      ${brR(1)}
+      <!-- SF left -->
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;">${card('p101','lg')}</div>
+      ${hL()}
+
+      <!-- ══ CENTER ══ -->
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;flex-shrink:0;padding:0 4px;">
+        <div style="font-size:8px;font-weight:900;color:#FFD700;letter-spacing:1.5px;text-align:center;">🏆 FINAL</div>
+        ${card(fin?fin.id:'',  'lg')}
+        <div style="height:12px;"></div>
+        <div style="font-size:8px;color:var(--muted);letter-spacing:1px;text-align:center;">🥉 3ER LUGAR</div>
+        ${card(bronze?bronze.id:'','md')}
       </div>
-      ${hLine()}
-      <!-- RIGHT SF -->
-      <div style="display:flex;align-items:center;">${card('p102',true)}</div>
+
+      <!-- ══ RIGHT SIDE ══ -->
+      ${hL()}
+      <!-- SF right -->
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;">${card('p102','lg')}</div>
+      <!-- brace 1→2 -->
+      ${brL(1)}
+      <!-- QF right (2 matches) -->
+      ${col(['p99','p100'],'md','20px')}
+      <!-- brace 2→4 -->
       ${brL(2)}
-      <!-- RIGHT QF -->
-      ${col(['p99','p100'],true,'20px')}
+      <!-- R16 right (4 matches) -->
+      ${col(['p91','p92','p95','p96'],'sm','6px')}
+      <!-- brace 4→8 -->
       ${brL(4)}
-      <!-- RIGHT R16 -->
-      ${col(['p91','p92','p95','p96'],false,'6px')}
-      ${brL(8)}
-      <!-- RIGHT D16 PATHWAY 1+2 -->
-      ${col(['p76','p78','p79','p80','p86','p88','p85','p87'],false,'3px')}
+      <!-- D16 right (8 matches) -->
+      ${col(['p76','p78','p79','p80','p86','p88','p85','p87'],'sm','2px')}
+
     </div>`;
   }
 
-  const tab=S._bracketTab||'pred';
   return `<div style="padding:10px;">
+    <!-- Tab switcher -->
     <div style="display:flex;border-radius:10px;overflow:hidden;border:1px solid var(--border);margin-bottom:10px;">
-      <button onclick="S._bracketTab='pred';render()" style="flex:1;padding:10px;border:none;cursor:pointer;font-size:12px;font-weight:700;background:${tab==='pred'?'var(--gold)':'rgba(255,255,255,0.05)'};color:${tab==='pred'?'#000':'var(--muted)'};">📋 Mis predicciones</button>
-      <button onclick="S._bracketTab='real';render()" style="flex:1;padding:10px;border:none;cursor:pointer;font-size:12px;font-weight:700;background:${tab==='real'?'#7aadff':'rgba(255,255,255,0.05)'};color:${tab==='real'?'#000':'var(--muted)'};">⚽ Resultados reales</button>
+      <button onclick="S._bracketTab='pred';render()" style="flex:1;padding:10px;border:none;cursor:pointer;font-size:12px;font-weight:700;
+        background:${tab==='pred'?'var(--gold)':'rgba(255,255,255,0.05)'};color:${tab==='pred'?'#000':'var(--muted)'};">📋 Mis predicciones</button>
+      <button onclick="S._bracketTab='real';render()" style="flex:1;padding:10px;border:none;cursor:pointer;font-size:12px;font-weight:700;
+        background:${tab==='real'?'#7aadff':'rgba(255,255,255,0.05)'};color:${tab==='real'?'#000':'var(--muted)'};">⚽ Resultados reales</button>
     </div>
+    <!-- Bracket card -->
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;">
-      <div style="padding:6px 12px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border);">← Desliza horizontalmente para ver el bracket completo →</div>
-      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
-        ${renderHalf(tab==='real')}
+      <div style="padding:6px 12px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border);">
+        ← Desliza para ver el bracket completo →
       </div>
+      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+        ${renderBracket(tab==='real')}
+      </div>
+    </div>
+    <!-- Legend -->
+    <div style="display:flex;gap:10px;padding:8px 4px;font-size:10px;color:var(--muted);flex-wrap:wrap;">
+      <span>🟡 Ganador del partido</span>
+      <span>❓ Equipo por definir</span>
     </div>
   </div>`;
 }
