@@ -1906,7 +1906,7 @@ function buildMatchCard(m,pred,locked){
   const realTxt=real&&real.h!==''&&real.h!==undefined?`Real: <strong>${real.h}-${real.a}</strong>`:` `;
   const hWin=win==='h'||(!locked&&win==='h');
   const aWin=win==='a'||(!locked&&win==='a');
-  return `<div class="mcard ${cls}">
+  return `<div class="mcard ${cls}" data-match-id="${m.id}">
     <div class="mcard-top">
       <div class="mcard-meta"><strong>${m.d}</strong> · ${m.t} CST · ${m.v}</div>
       ${resBadge}
@@ -1997,7 +1997,7 @@ function buildEliminacion(){
         const bl=res==='exact'?['rb-exact','✅ +2pts']:res==='winner'?['rb-winner','✔ +1pt']:['rb-miss','❌ 0pts'];
         koResBadge=`<span class="mcard-result-badge ${bl[0]}">${bl[1]}</span>`;
       }
-      return `<div class="ko-match mcard ${koCardCls}">
+      return `<div class="ko-match mcard ${koCardCls}" data-ko-match-id="${m.id}">
         <div class="ko-match-lbl" style="display:flex;justify-content:space-between;align-items:center;">
             <span>${m.label} · ${m.d} · ${m.v}</span>
             ${koResBadge}
@@ -2014,9 +2014,8 @@ function buildEliminacion(){
               <input type="number" class="ko-score-inp" min="0" max="20" value="${pa}" ${dis||unknown?'disabled':''} oninput="SKO('${m.id}','a',this.value)" inputmode="numeric" pattern="[0-9]*" />
             </div>
             <div class="ko-win-btns">
-              <button class="ko-win-btn ${win==='h'?'active':''}" ${dis||unknown?'disabled':''} onclick="SWKO('${m.id}','h')">${F(ht)}</button>
-              ${r!=='FIN'&&r!=='3P'?`<button class="ko-win-btn ${win==='a'?'active':''}" ${dis||unknown?'disabled':''} onclick="SWKO('${m.id}','a')">${F(at)}</button>`
-              :`<button class="ko-win-btn ${win==='a'?'active':''}" ${dis||unknown?'disabled':''} onclick="SWKO('${m.id}','a')">${F(at)}</button>`}
+              <button class="ko-win-btn ${win==='h'?'active':''}" data-win="h" ${dis||unknown?'disabled':''} onclick="SWKO('${m.id}','h')">${F(ht)}</button>
+              <button class="ko-win-btn ${win==='a'?'active':''}" data-win="a" ${dis||unknown?'disabled':''} onclick="SWKO('${m.id}','a')">${F(at)}</button>
             </div>
             ${unknown?`<div class="ko-pen-note">Equipos aún no definidos</div>`:`<div class="ko-pen-note">En caso de empate, indica quién gana en penales (marca ganador)</div>`}
             ${(()=>{
@@ -3065,18 +3064,43 @@ window.SP=(id,side,val)=>{
   if(!u.preds[id])u.preds[id]={h:'',a:''};
   u.preds[id][side]=val===''?'':(parseInt(val)>=0?parseInt(val):0);
   save();
+  // Update progress bar
   const filled=ALL.filter(m=>u.preds[m.id]&&u.preds[m.id].h!==''&&u.preds[m.id].a!=='').length;
   const pf=document.getElementById('pfill');
   if(pf)pf.style.width=Math.round((filled/TOTAL)*100)+'%';
+  // Auto-sync win buttons to reflect the new score without full re-render
+  const p=u.preds[id];
+  const ph=p.h, pa=p.a;
+  const phn=ph===''?-1:parseInt(ph), pan=pa===''?-1:parseInt(pa);
+  if(phn>=0&&pan>=0){
+    const win=phn>pan?'h':pan>phn?'a':'d';
+    // Update active state on win buttons directly in the DOM
+    const card=document.querySelector(`[data-match-id="${id}"]`);
+    if(card){
+      card.querySelectorAll('.win-btn').forEach((btn,i)=>{
+        const btnWin=['h','d','a'][i];
+        btn.classList.toggle('active',btnWin===win);
+      });
+    }
+  }
 };
 window.SW=(id,win)=>{
   const u=curUser();if(!u||u.locked)return;
   if(!u.preds[id])u.preds[id]={h:'',a:''};
   const p=u.preds[id];
   const h=parseInt(p.h)>=0?parseInt(p.h)||0:0,a=parseInt(p.a)>=0?parseInt(p.a)||0:0;
-  if(win==='h'){p.h=h>a?h:a+1;p.a=a;if(parseInt(p.h)<=parseInt(p.a)){p.h=1;p.a=0;}}
-  else if(win==='a'){p.a=a>h?a:h+1;p.h=h;if(parseInt(p.a)<=parseInt(p.h)){p.a=1;p.h=0;}}
-  else{const v=Math.max(h,a,1);p.h=v;p.a=v;}
+  if(win==='h'){
+    // Local wins: ensure h > a
+    if(h>a){p.h=h;p.a=a;}
+    else{p.h=Math.max(h,a)+1||1;p.a=Math.min(h,a)||0;}
+  } else if(win==='a'){
+    // Visitante wins: ensure a > h
+    if(a>h){p.h=h;p.a=a;}
+    else{p.h=Math.min(h,a)||0;p.a=Math.max(h,a)+1||1;}
+  } else {
+    // Empate: ensure h === a
+    const v=Math.max(h,a,1);p.h=v;p.a=v;
+  }
   save();render();
 };
 window.SAVE_PROGRESS=async()=>{
@@ -3098,14 +3122,32 @@ window.SKO=(id,side,val)=>{
   if(!u.kopreds[id])u.kopreds[id]={h:'',a:''};
   u.kopreds[id][side]=val===''?'':(parseInt(val)>=0?parseInt(val):0);
   save();
+  // Auto-sync win buttons for KO match
+  const p=u.kopreds[id];
+  const phn=p.h===''?-1:parseInt(p.h), pan=p.a===''?-1:parseInt(p.a);
+  if(phn>=0&&pan>=0&&phn!==pan){
+    const win=phn>pan?'h':'a';
+    const card=document.querySelector(`[data-ko-match-id="${id}"]`);
+    if(card){
+      card.querySelectorAll('.ko-win-btn').forEach(btn=>{
+        const bw=btn.getAttribute('data-win');
+        if(bw) btn.classList.toggle('active',bw===win);
+      });
+    }
+  }
 };
 window.SWKO=(id,win)=>{
   const u=curUser();if(!u||u.kolocked)return;
   if(!u.kopreds[id])u.kopreds[id]={h:'',a:''};
   const p=u.kopreds[id];
   const h=parseInt(p.h)>=0?parseInt(p.h)||0:0,a=parseInt(p.a)>=0?parseInt(p.a)||0:0;
-  if(win==='h'){p.h=h>a?h:a+1;p.a=a;if(parseInt(p.h)<=parseInt(p.a)){p.h=1;p.a=0;}}
-  else if(win==='a'){p.a=a>h?a:h+1;p.h=h;if(parseInt(p.a)<=parseInt(p.h)){p.a=1;p.h=0;}}
+  if(win==='h'){
+    if(h>a){p.h=h;p.a=a;}
+    else{p.h=Math.max(h,a)+1||1;p.a=Math.min(h,a)||0;}
+  } else if(win==='a'){
+    if(a>h){p.h=h;p.a=a;}
+    else{p.h=Math.min(h,a)||0;p.a=Math.max(h,a)+1||1;}
+  }
   save();render();
 };
 window.LKO=()=>{
