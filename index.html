@@ -1576,7 +1576,7 @@ function buildContent(){
     if(S.tab==='aq') return buildAdminQSelector('aq');
     if(S.tab==='ar') return buildAdminGroupResults()+fab;
     if(S.tab==='ako') return buildAdminKOResults()+fab;
-    if(S.tab==='ark') return S.adminQ?buildRanking():buildRankingAll();
+    if(S.tab==='ark') return buildRanking(); // admin sees same ranking as user
     if(S.tab==='aca') return buildCoAdminPage();
     return buildAdminQSelector('aq');
   }
@@ -2144,8 +2144,35 @@ function buildResultados(){
     if(playedG===0) body+=`<div style="padding:30px;text-align:center;color:var(--muted);">⏳ Aún no hay resultados de grupos</div>`;
   } else {
     // Eliminación — same card style as grupos but with resolved team names
-    body=['D16','R16','QF','SF','3P','FIN'].map(round=>{
-      const ms=KO_MATCHES.filter(m=>m.round===round);
+    // Helper: has a team played at least one group match?
+    function teamHasPlayed(teamName){
+      if(!teamName||teamName==='?') return false;
+      return ALL.some(m=>{
+        const r=(R.results||{})[m.id];
+        return r&&r.h!==''&&r.h!==undefined&&(m.h===teamName||m.a===teamName);
+      });
+    }
+    // Helper: should a KO match be shown? Both teams must have played at least 1 group match
+    // OR the match itself has a real result already
+    function shouldShowKOMatch(m){
+      const r=realKO[m.id];
+      if(r&&r.h!==''&&r.h!==undefined) return true; // already has result
+      const th=resolveKOTeam(m.hPos,R.results||{},realKO);
+      const ta=resolveKOTeam(m.aPos,R.results||{},realKO);
+      return teamHasPlayed(th)||teamHasPlayed(ta); // at least one team known
+    }
+
+    // Gate rounds: D16 needs group data, R16 needs D16 results, etc.
+    const d16Played=KO_MATCHES.filter(m=>m.round==='D16').some(m=>shouldShowKOMatch(m));
+    const r16Played=KO_MATCHES.filter(m=>m.round==='R16').some(m=>{const r=realKO[m.id];return r&&r.h!==''});
+    const qfPlayed=KO_MATCHES.filter(m=>m.round==='QF').some(m=>{const r=realKO[m.id];return r&&r.h!==''});
+    const sfPlayed=KO_MATCHES.filter(m=>m.round==='SF').some(m=>{const r=realKO[m.id];return r&&r.h!==''});
+
+    const roundsVisible={'D16':d16Played,'R16':r16Played,'QF':qfPlayed,'SF':sfPlayed,'3P':sfPlayed,'FIN':sfPlayed};
+
+    body=['D16','R16','QF','SF','3P','FIN'].filter(round=>roundsVisible[round]).map(round=>{
+      const ms=KO_MATCHES.filter(m=>m.round===round).filter(m=>shouldShowKOMatch(m));
+      if(!ms.length) return '';
       const cards=ms.map(m=>{
         const r=realKO[m.id];
         const teamH=resolveKOTeam(m.hPos,R.results||{},realKO);
@@ -2155,7 +2182,7 @@ function buildResultados(){
       return `<div class="ko-round-label">${ROUND_LABELS[round]}</div>
       <div style="padding:0 10px;">${cards}</div>`;
     }).join('');
-    if(playedKO===0) body+=`<div style="padding:30px;text-align:center;color:var(--muted);">⏳ Aún no hay resultados de la fase eliminatoria</div>`;
+    if(!d16Played) body=`<div style="padding:30px;text-align:center;color:var(--muted);font-size:12px;">⏳ Los cruces de eliminación aparecerán aquí conforme los equipos jueguen su primer partido de grupos.</div>`;
   }
 
   return `<div style="padding:0 0 10px;">${tabBar}${body}</div>`;
@@ -2257,7 +2284,7 @@ function buildRanking(){
         <td><span class="bs bs-g">${isLocked?u.exact:'—'}</span></td>
         <td><span class="bs bs-y">${isLocked?u.winner:'—'}</span></td>
         <td><span class="bs bs-r">${isLocked?u.miss:'—'}</span></td>
-         <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>
+        <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>`;}).join('')}
         <td style="font-size:11px;">${(()=>{
           if(u.locked===false) return '<span style="color:var(--muted)">—</span>';
           const q2=getQ(qName);
@@ -2269,7 +2296,7 @@ function buildRanking(){
           const wrong=realChamp&&champ!==realChamp;
           return `<span style="color:${correct?'#69ff6e':wrong?'#ff8a8a':'#fff'}">${F(champ)} ${champ}</span>`;
         })()}</td>
-     </tr>`;}).join('')}
+      </tr>`}).join('')}
       </tbody>
     </table>
     </div>
@@ -2496,32 +2523,32 @@ function buildAdminKOResults(){
     return ov ? null : algorithmTeam; // overrides handled at match level
   }
 
-  // Only show rounds where predecessor matches have results
-  const R2=getResults();
-  const realRes2=R2.results||{};
-  const playedGroupMatches=Object.values(realRes2).filter(r=>r&&r.h!==''&&r.h!==undefined).length;
-  // D16 only shows when at least some group matches have results
-  // R16 only shows when at least 1 D16 has a result
-  // QF only shows when at least 1 R16 has a result, etc.
-  const d16Results=KO_MATCHES.filter(m=>m.round==='D16').filter(m=>realKO[m.id]&&realKO[m.id].h!=='').length;
-  const r16Results=KO_MATCHES.filter(m=>m.round==='R16').filter(m=>realKO[m.id]&&realKO[m.id].h!=='').length;
-  const qfResults=KO_MATCHES.filter(m=>m.round==='QF').filter(m=>realKO[m.id]&&realKO[m.id].h!=='').length;
-  const sfResults=KO_MATCHES.filter(m=>m.round==='SF').filter(m=>realKO[m.id]&&realKO[m.id].h!=='').length;
+  // Show KO matches progressively as teams qualify from groups
+  function adminTeamHasPlayed(teamName){
+    if(!teamName||teamName==='?') return false;
+    return ALL.some(m=>{
+      const rg=realPreds[m.id];
+      return rg&&rg.h!==''&&rg.h!==undefined&&(m.h===teamName||m.a===teamName);
+    });
+  }
+  function adminShouldShowKO(m){
+    const r=realKO[m.id];
+    if(r&&r.h!==''&&r.h!==undefined) return true;
+    const th=resolveReal(m.hPos);
+    const ta=resolveReal(m.aPos);
+    return adminTeamHasPlayed(th)||adminTeamHasPlayed(ta);
+  }
+  const d16Vis=KO_MATCHES.filter(m=>m.round==='D16').some(m=>adminShouldShowKO(m));
+  const r16Vis=KO_MATCHES.filter(m=>m.round==='R16').some(m=>{const r=realKO[m.id];return r&&r.h!==''});
+  const qfVis=KO_MATCHES.filter(m=>m.round==='QF').some(m=>{const r=realKO[m.id];return r&&r.h!==''});
+  const sfVis=KO_MATCHES.filter(m=>m.round==='SF').some(m=>{const r=realKO[m.id];return r&&r.h!==''});
+  const roundVis={'D16':d16Vis,'R16':r16Vis,'QF':qfVis,'SF':sfVis,'3P':sfVis,'FIN':sfVis};
 
-  const roundsToShow=['D16','R16','QF','SF','3P','FIN'].filter(r=>{
-    if(r==='D16') return playedGroupMatches>0; // need some group results
-    if(r==='R16') return d16Results>0;
-    if(r==='QF') return r16Results>0;
-    if(r==='SF') return qfResults>0;
-    if(r==='3P'||r==='FIN') return sfResults>0;
-    return false;
-  });
-
-  if(roundsToShow.length===0) return `<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">
-    ⏳ Los cruces de dieciseisavos aparecerán aquí cuando captures los resultados de la fase de grupos.
+  if(!d16Vis) return `<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">
+    ⏳ Los cruces aparecerán conforme los equipos jueguen su primer partido de grupos.
   </div>`;
 
-  return roundsToShow.map(round=>{
+  return ['D16','R16','QF','SF','3P','FIN'].filter(r=>roundVis[r]).map(round=>{
     const ms=KO_MATCHES.filter(m=>m.round===round);
     return `<div class="ko-round-label">${ROUND_LABELS[round]}</div>
     <div style="padding:0 10px;">
@@ -3172,18 +3199,15 @@ window.SP=(id,side,val)=>{
   const filled=ALL.filter(m=>u.preds[m.id]&&u.preds[m.id].h!==''&&u.preds[m.id].a!=='').length;
   const pf=document.getElementById('pfill');
   if(pf)pf.style.width=Math.round((filled/TOTAL)*100)+'%';
-  // Auto-sync win buttons to reflect the new score without full re-render
+  // Auto-sync win buttons when both scores are filled
   const p=u.preds[id];
-  const ph=p.h, pa=p.a;
-  const phn=ph===''?-1:parseInt(ph), pan=pa===''?-1:parseInt(pa);
+  const phn=p.h===''?-1:parseInt(p.h), pan=p.a===''?-1:parseInt(p.a);
   if(phn>=0&&pan>=0){
     const win=phn>pan?'h':pan>phn?'a':'d';
-    // Update active state on win buttons directly in the DOM
-    const card=document.querySelector(`[data-match-id="${id}"]`);
+    const card=document.querySelector('[data-match-id="'+id+'"]');
     if(card){
-      card.querySelectorAll('.win-btn').forEach((btn,i)=>{
-        const btnWin=['h','d','a'][i];
-        btn.classList.toggle('active',btnWin===win);
+      card.querySelectorAll('.win-btn').forEach(btn=>{
+        btn.classList.toggle('active', btn.dataset.win===win);
       });
     }
   }
@@ -3203,29 +3227,21 @@ window.SW=(id,win)=>{
     const v=Math.max(h,a,1);p.h=v;p.a=v;
   }
   save();
-  // Update DOM directly — no full re-render to avoid flash
-  const card=document.querySelector(`[data-match-id="${id}"]`);
+  // Update DOM directly without re-render
+  const card=document.querySelector('[data-match-id="'+id+'"]');
   if(card){
     const inps=card.querySelectorAll('.score-inp');
     if(inps[0]) inps[0].value=p.h;
     if(inps[1]) inps[1].value=p.a;
-    const btns=card.querySelectorAll('.win-btn');
-    btns.forEach(btn=>{
-      const bw=btn.dataset.win;
-      const active=bw===win;
-      btn.classList.toggle('active',active);
+    // Activate the correct win button
+    card.querySelectorAll('.win-btn').forEach(btn=>{
+      btn.classList.toggle('active', btn.dataset.win===win);
     });
-    // Update mcard color class
-    card.classList.remove('exact','winner','miss');
-    // Update progress bar
+    // Progress bar
     const filled=Object.values(u.preds).filter(x=>x&&x.h!=='').length;
     const pf=document.getElementById('pfill');
     if(pf) pf.style.width=Math.round((filled/TOTAL)*100)+'%';
-    const pfTxt=document.getElementById('pfill-txt');
-    if(pfTxt) pfTxt.textContent=filled+'/'+TOTAL;
-  } else {
-    render(); // fallback if card not found
-  }
+  } else { render(); }
 };
 window.SAVE_PROGRESS=async()=>{
   const u=curUser(); if(!u||u.locked) return;
