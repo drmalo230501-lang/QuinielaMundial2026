@@ -1998,9 +1998,9 @@ function buildMatchCard(m,pred,locked){
             oninput="SP('${m.id}','a',this.value)" inputmode="numeric" pattern="[0-9]*" />
         </div>
         <div class="win-btns">
-          <button class="win-btn ${win==='h'?'active':''}" ${dis} onclick="SW('${m.id}','h')">${F(m.h)}</button>
-          <button class="win-btn ${win==='d'?'active':''}" ${dis} onclick="SW('${m.id}','d')">EMP</button>
-          <button class="win-btn ${win==='a'?'active':''}" ${dis} onclick="SW('${m.id}','a')">${F(m.a)}</button>
+          <button class="win-btn ${win==='h'?'active':''}" data-win="h" ${dis} onclick="SW('${m.id}','h')">${F(m.h)}</button>
+          <button class="win-btn ${win==='d'?'active':''}" data-win="d" ${dis} onclick="SW('${m.id}','d')">EMP</button>
+          <button class="win-btn ${win==='a'?'active':''}" data-win="a" ${dis} onclick="SW('${m.id}','a')">${F(m.a)}</button>
         </div>
         <div class="score-real" style="font-size:10px;color:var(--muted);">${realTxt}</div>
       </div>
