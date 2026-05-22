@@ -501,18 +501,32 @@ const ADMIN_PASS='admin2026';
 let S={quinielas:{},cur:null,admin:false,tab:'grupos',adminQ:null};
 
 // ===================== FIREBASE =====================
-const _fbApp = firebase.initializeApp({
+const _firebaseCfg={
   apiKey: "AIzaSyAJDzRAGFPtz8tZbKeFQCXV9NPUIRB6F0U",
   authDomain: "quiniela-mundial-2026-41f26.firebaseapp.com",
   projectId: "quiniela-mundial-2026-41f26",
   storageBucket: "quiniela-mundial-2026-41f26.firebasestorage.app",
   messagingSenderId: "8594601103",
   appId: "1:8594601103:web:f56f85c807b930f4d32cfa"
-});
-const _db = firebase.firestore();
+};
+const _cloudAvailable = typeof firebase!=='undefined' && firebase && typeof firebase.initializeApp==='function' && typeof firebase.firestore==='function';
+const _fbApp = _cloudAvailable ? firebase.initializeApp(_firebaseCfg) : null;
+const _db = _cloudAvailable ? firebase.firestore() : null;
 const SK='q2026v6';
-
+  
 async function load(){
+  if(!_cloudAvailable || !_db){
+    try{
+      const raw=localStorage.getItem(SK);
+      if(raw){
+        const saved=JSON.parse(raw);
+        S.quinielas=saved.quinielas||{};
+        S.coadmins=saved.coadmins||{};
+      }
+    }catch(e){ console.error('Error cargando datos locales:',e); }
+    render();
+    return;
+  }
   try{
     const snap = await _db.collection('quinielas').doc(SK).get();
     if(snap.exists){
@@ -589,6 +603,13 @@ async function saveUserPreds(){
 }
 
 async function save(){
+   if(!_cloudAvailable || !_db){
+    try{
+      localStorage.setItem(SK,JSON.stringify({quinielas:S.quinielas,coadmins:S.coadmins||{}}));
+      _showSaveIndicator('saved');
+    }catch(e){ console.error('Error guardando local:',e); _showSaveIndicator('error'); }
+    return;
+  }
   return new Promise(resolve=>{
     if(_saveTimer) clearTimeout(_saveTimer);
     _showSaveIndicator('saving');
@@ -605,6 +626,14 @@ async function save(){
   });
 }
 async function saveNow(){
+  if(!_cloudAvailable || !_db){
+    _showSaveIndicator('saving');
+    try{
+      localStorage.setItem(SK,JSON.stringify({quinielas:S.quinielas,coadmins:S.coadmins||{}}));
+      _showSaveIndicator('saved');
+    }catch(e){ console.error('Error guardando local (now):',e); _showSaveIndicator('error'); }
+    return;
+  }
   if(_saveTimer){clearTimeout(_saveTimer);_saveTimer=null;}
   _showSaveIndicator('saving');
   // Also flush user preds immediately
@@ -1386,10 +1415,26 @@ let _renderPending=false;
 function render(){
   if(_renderPending) return;
   _renderPending=true;
-  requestAnimationFrame(()=>{
+const raf=(typeof requestAnimationFrame==='function')?requestAnimationFrame:(cb)=>setTimeout(cb,0);
+  raf(()=>{
     _renderPending=false;
-    _standingsCacheKey=Date.now()+'_r';
-    document.getElementById('root').innerHTML=buildHTML();
+    try{
+      _standingsCacheKey=Date.now()+'_r';
+      const root=document.getElementById('root');
+      if(!root) return;
+      root.innerHTML=buildHTML();
+    }catch(e){
+      console.error('Render error:',e);
+      const root=document.getElementById('root');
+      if(root){
+        root.innerHTML=`<div style="padding:16px;">
+          <div class="alert alert-e">
+            <strong>⚠️ Error al renderizar la app</strong><br>
+            <span style="font-size:11px;opacity:.9;">${(e&&e.message)||'Error desconocido'}</span>
+          </div>
+        </div>`;
+      }
+    }
   });
 }
 
