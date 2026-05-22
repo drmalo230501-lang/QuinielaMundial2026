@@ -2032,20 +2032,56 @@ function buildEliminacion(){
   }
   const koFilled=KO_MATCHES.filter(m=>kopreds[m.id]&&kopreds[m.id].h!==''&&kopreds[m.id].a!=='').length;
   const koTotal=KO_MATCHES.length;
-  const rounds=['D16','R16','QF','SF','3P','FIN'];
+  // Determine which rounds are visible:
+  // D16 always visible once groups locked
+  // R16 visible when at least 1 D16 has a winner in kopreds
+  // QF visible when at least 1 R16 has a winner, etc.
+  function roundHasWinner(round){
+    return KO_MATCHES.filter(m=>m.round===round).some(m=>{
+      const kp=kopreds[m.id];
+      if(!kp||kp.h===''||kp.a==='') return false;
+      const h=parseInt(kp.h),a=parseInt(kp.a);
+      if(isNaN(h)||isNaN(a)) return false;
+      return h!==a||(kp.win&&kp.win!==''); // winner or penales selection
+    });
+  }
+  function roundHasPenWinner(round){
+    // For draws, check if win button was pressed (stored in kopreds.win)
+    return KO_MATCHES.filter(m=>m.round===round).some(m=>{
+      const kp=kopreds[m.id];
+      if(!kp) return false;
+      const h=parseInt(kp.h),a=parseInt(kp.a);
+      if(!isNaN(h)&&!isNaN(a)&&h!==a) return true; // clear winner
+      return false;
+    });
+  }
+
+  const roundVisible={
+    'D16': true,
+    'R16': roundHasWinner('D16'),
+    'QF':  roundHasWinner('R16'),
+    'SF':  roundHasWinner('QF'),
+    '3P':  roundHasWinner('SF'),
+    'FIN': roundHasWinner('SF'),
+  };
+
+  const visibleRounds=['D16','R16','QF','SF','3P','FIN'].filter(r=>roundVisible[r]);
+  const koFilled2=KO_MATCHES.filter(m=>roundVisible[m.round]&&kopreds[m.id]&&kopreds[m.id].h!==''&&kopreds[m.id].a!=='').length;
+  const koTotal2=KO_MATCHES.filter(m=>roundVisible[m.round]).length;
+
   return `
   ${koLocked
     ?`<div class="alert alert-w" style="margin:10px;">🔒 Fase eliminatoria guardada. ¡Buena suerte!</div>`
     :`<div class="prog-wrap">
         <div class="flex-between" style="font-size:11px;margin-bottom:4px;">
-          <span style="color:var(--muted);">Partidos eliminación: <strong style="color:#fff;">${koFilled}/${koTotal}</strong></span>
+          <span style="color:var(--muted);">Partidos disponibles: <strong style="color:#fff;">${koFilled}/${koTotal}</strong></span>
           ${koFilled===koTotal?`<span style="color:var(--green);font-size:11px;font-weight:700;">✅ Completo</span>`:`<span class="locked-tag">Sin guardar</span>`}
         </div>
         <div class="prog-bar"><div class="prog-fill" style="width:${Math.round((koFilled/koTotal)*100)}%"></div></div>
       </div>
-      <div class="alert alert-w" style="margin:10px;">⚙️ Los equipos se calculan automáticamente según tus predicciones de grupos.</div>`
+      <div class="alert alert-w" style="margin:10px;">⚙️ Conforme vayas eligiendo ganadores, se irán desbloqueando los siguientes cruces automáticamente.</div>`
   }
-  ${rounds.map(r=>{
+  ${visibleRounds.map(r=>{
     const ms=KO_MATCHES.filter(m=>m.round===r);
     return `<div class="ko-round-label">${ROUND_LABELS[r]}</div>
     ${ms.map(m=>{
@@ -2082,9 +2118,11 @@ function buildEliminacion(){
           </div>
           <div class="ko-score-center">
             <div class="ko-score-row">
-              <input type="number" class="ko-score-inp" min="0" max="20" value="${ph}" ${dis||unknown?'disabled':''} oninput="SKO('${m.id}','h',this.value)" inputmode="numeric" pattern="[0-9]*" />
+              <input type="number" class="ko-score-inp" min="0" max="20" value="${ph}" ${dis||unknown?'disabled':''} 
+                oninput="SKO('${m.id}','h',this.value)" inputmode="numeric" pattern="[0-9]*" />
               <span class="ko-vs">-</span>
-              <input type="number" class="ko-score-inp" min="0" max="20" value="${pa}" ${dis||unknown?'disabled':''} oninput="SKO('${m.id}','a',this.value)" inputmode="numeric" pattern="[0-9]*" />
+              <input type="number" class="ko-score-inp" min="0" max="20" value="${pa}" ${dis||unknown?'disabled':''} 
+                oninput="SKO('${m.id}','a',this.value)" inputmode="numeric" pattern="[0-9]*" />
             </div>
             <div class="ko-win-btns">
               <button class="ko-win-btn ${win==='h'?'active':''}" data-win="h" ${dis||unknown?'disabled':''} onclick="SWKO('${m.id}','h')">${F(ht)}</button>
@@ -2105,9 +2143,10 @@ function buildEliminacion(){
     }).join('')}`;
   }).join('')}
   ${!koLocked?`<div style="padding:10px 10px 0;">
-    <button class="btn ${koFilled===koTotal?'btn-success':'btn-secondary'} btn-full" 
+    <button class="btn ${koFilled===koTotal?'btn-success':'btn-secondary'} btn-full"
       ${koFilled===koTotal?'':'disabled style="opacity:0.4;"'}
-      onclick="LKO()">${koFilled===koTotal?'🔒 Guardar fase eliminatoria':'Faltan '+(koTotal-koFilled)+' partidos'}</button>
+      onclick="LKO()">${koFilled===koTotal?'🔒 Guardar y bloquear eliminatoria':'⏳ Faltan '+(koTotal-koFilled)+' partidos de '+koTotal}</button>
+    ${koTotal<KO_MATCHES.length?`<div style="font-size:10px;color:var(--muted);text-align:center;margin-top:6px;">Los cruces siguientes se desbloquean al elegir ganadores</div>`:''}
   </div>`:''}`;
 }
 
@@ -2284,7 +2323,7 @@ function buildRanking(){
         <td><span class="bs bs-g">${isLocked?u.exact:'—'}</span></td>
         <td><span class="bs bs-y">${isLocked?u.winner:'—'}</span></td>
         <td><span class="bs bs-r">${isLocked?u.miss:'—'}</span></td>
-       <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>
+        <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>`;}).join('')}
         <td style="font-size:11px;">${(()=>{
           if(u.locked===false) return '<span style="color:var(--muted)">—</span>';
           const q2=getQ(qName);
@@ -2296,7 +2335,7 @@ function buildRanking(){
           const wrong=realChamp&&champ!==realChamp;
           return `<span style="color:${correct?'#69ff6e':wrong?'#ff8a8a':'#fff'}">${F(champ)} ${champ}</span>`;
         })()}</td>
-      </tr>`;}).join('')}
+      </tr>`}).join('')}
       </tbody>
     </table>
     </div>
@@ -3262,17 +3301,26 @@ window.SKO=(id,side,val)=>{
   if(!u.kopreds[id])u.kopreds[id]={h:'',a:''};
   u.kopreds[id][side]=val===''?'':(parseInt(val)>=0?parseInt(val):0);
   save();
-  // Auto-sync win buttons for KO match
   const p=u.kopreds[id];
   const phn=p.h===''?-1:parseInt(p.h), pan=p.a===''?-1:parseInt(p.a);
-  if(phn>=0&&pan>=0&&phn!==pan){
-    const win=phn>pan?'h':'a';
-    const card=document.querySelector(`[data-ko-match-id="${id}"]`);
-    if(card){
-      card.querySelectorAll('.ko-win-btn').forEach(btn=>{
-        const bw=btn.getAttribute('data-win');
-        if(bw) btn.classList.toggle('active',bw===win);
-      });
+  if(phn>=0&&pan>=0){
+    if(phn!==pan){
+      // Winner defined — update this card's buttons AND re-render so next round updates
+      const win=phn>pan?'h':'a';
+      const card=document.querySelector('[data-ko-match-id="'+id+'"]');
+      if(card){
+        card.querySelectorAll('.ko-win-btn').forEach(btn=>{
+          btn.classList.toggle('active',btn.getAttribute('data-win')===win);
+        });
+      }
+      // Re-render to cascade winner to next round
+      render();
+    } else {
+      // Draw (penales) — just sync buttons
+      const card=document.querySelector('[data-ko-match-id="'+id+'"]');
+      if(card){
+        card.querySelectorAll('.ko-win-btn').forEach(btn=>btn.classList.remove('active'));
+      }
     }
   }
 };
@@ -3289,18 +3337,18 @@ window.SWKO=(id,win)=>{
     else{p.h=Math.min(h,a)||0;p.a=Math.max(h,a)+1||1;}
   }
   save();
-  // Update DOM without re-render to avoid flash
-  const card=document.querySelector(`[data-ko-match-id="${id}"]`);
+  // Update this card immediately then re-render so next round gets the winner
+  const card=document.querySelector('[data-ko-match-id="'+id+'"]');
   if(card){
     const inps=card.querySelectorAll('.ko-score-inp');
     if(inps[0]) inps[0].value=p.h;
     if(inps[1]) inps[1].value=p.a;
     card.querySelectorAll('.ko-win-btn').forEach(btn=>{
-      btn.classList.toggle('active',btn.dataset.win===win);
+      btn.classList.toggle('active',btn.getAttribute('data-win')===win);
     });
-  } else {
-    render();
   }
+  // Always re-render to cascade winner to next round without full-page flash
+  render();
 };
 window.LKO=()=>{
   const u=curUser();if(!u)return;
