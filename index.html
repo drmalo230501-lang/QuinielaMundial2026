@@ -8,6 +8,7 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#07071a;color:#fff;min-height:100vh;overscroll-behavior:none;transition:background .3s,color .3s;}
+  .no-anim,.no-anim *{transition:none!important;animation:none!important;}
 body.light-mode{background:#f0f2f8;color:#111;}
 body.light-mode :root,body.light-mode{--card:#ffffff;--card2:#e8eaf6;--border:rgba(0,0,0,0.15);--muted:rgba(0,0,0,0.55);}
 body.light-mode .header{background:linear-gradient(180deg,#1a1a6e,#0d0d40);}
@@ -3314,7 +3315,8 @@ window.SW=(id,win)=>{
     const v=Math.max(h,a,1);p.h=v;p.a=v;
   }
   save();
-  // Update DOM directly without re-render
+  // Update DOM directly without re-render to avoid flash
+  document.body.classList.add('no-anim');
   const card=document.querySelector('[data-match-id="'+id+'"]');
   if(card){
     const inps=card.querySelectorAll('.score-inp');
@@ -3330,6 +3332,7 @@ window.SW=(id,win)=>{
     if(pf) pf.style.width=Math.round((filled/TOTAL)*100)+'%';
   } else { render(); }
 };
+   requestAnimationFrame(()=>document.body.classList.remove('no-anim'));
 window.SAVE_PROGRESS=async()=>{
   const u=curUser(); if(!u||u.locked) return;
   _showSaveIndicator('saving');
@@ -3374,6 +3377,7 @@ window.SKO=(id,side,val)=>{
 };
 window.SWKO=(id,win)=>{
   const u=curUser();if(!u||u.kolocked)return;
+  if(window.event){window.event.preventDefault();window.event.stopPropagation();}
   if(!u.kopreds[id])u.kopreds[id]={h:'',a:''};
   const p=u.kopreds[id];
   const h=parseInt(p.h)>=0?parseInt(p.h)||0:0,a=parseInt(p.a)>=0?parseInt(p.a)||0:0;
@@ -3898,7 +3902,28 @@ window.EXPORT_EXCEL = function(qName) {
   XLSX.writeFile(wb, `Quiniela_${qName}_${fecha}.xlsx`);
 };
 
-load();
+function showFatalError(err){
+  const root=document.getElementById('root');
+  if(!root) return;
+  const msg=(err&&err.message)?err.message:String(err||'Error desconocido');
+  root.innerHTML=`<div style="padding:16px;">
+    <div class="alert alert-e">
+      <strong>❌ Error crítico al iniciar</strong><br>
+      <span style="font-size:11px;opacity:.9;word-break:break-word;">${msg}</span>
+    </div>
+  </div>`;
+}
+
+window.addEventListener('error',e=>{
+  console.error('Global error:',e.error||e.message||e);
+  showFatalError(e.error||e.message||e);
+});
+window.addEventListener('unhandledrejection',e=>{
+  console.error('Unhandled promise rejection:',e.reason||e);
+  showFatalError(e.reason||e);
+});
+
+try{ load(); }catch(e){ console.error('Boot error:',e); showFatalError(e); }
 
 // Auto-refresh every 30 seconds when admin is viewing users
 setInterval(()=>{
