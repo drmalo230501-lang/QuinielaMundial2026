@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -2323,7 +2324,7 @@ function buildRanking(){
         <td><span class="bs bs-g">${isLocked?u.exact:'—'}</span></td>
         <td><span class="bs bs-y">${isLocked?u.winner:'—'}</span></td>
         <td><span class="bs bs-r">${isLocked?u.miss:'—'}</span></td>
-       <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>
+        <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>`;}).join('')}
         <td style="font-size:11px;">${(()=>{
           if(u.locked===false) return '<span style="color:var(--muted)">—</span>';
           const q2=getQ(qName);
@@ -2668,7 +2669,8 @@ function buildAdminQSelector(activeTab){
               <div style="font-size:9px;color:var(--muted);">${u.locked?stats.total+'pts · '+stats.exact+'✅ '+stats.winner+'✔':Object.values(u.preds||{}).filter(p=>p&&p.h!=='').length+'/'+TOTAL+' capturados'}</div>
               </div>
             <div style="display:flex;flex-direction:column;gap:3px;">
-              ${u.locked?`<button class="btn btn-secondary btn-sm" onclick="UU('${n}')" title="Desbloquear grupos">🔓</button>`:''}
+              ${u.locked?`<button class="btn btn-secondary btn-sm" onclick="UU('${n}')" title="Desbloquear grupos">🔓 G</button>`:''}
+              ${u.kolocked?`<button class="btn btn-secondary btn-sm" onclick="UUK('${n}')" title="Desbloquear eliminatoria" style="background:rgba(100,150,255,0.15);border-color:rgba(100,150,255,0.4);color:#7aadff;">🔓 E</button>`:''}
               <button class="btn btn-secondary btn-sm" onclick="RESET_PIN('${n}','${qn}')" title="Resetear PIN">🔑</button>
               <button class="btn btn-success btn-sm" onclick="OPEN_EDIT('${n}')">✏️</button>
               <button class="btn btn-danger btn-sm" onclick="DEL('${n}')">🗑️</button>
@@ -2765,7 +2767,8 @@ function buildAdminUsers(){
             <div style="font-size:10px;color:var(--muted);">${u.locked?`Guardada · ${stats.total}pts · ${stats.exact}✅ ${stats.winner}✔`:`En progreso · ${Object.keys(u.preds||{}).filter(k=>u.preds[k]&&u.preds[k].h!=='').length}/${TOTAL} partidos`}</div>
           </div>
           <div style="display:flex;gap:4px;flex-direction:column;">
-            ${u.locked?`<button class="btn btn-secondary btn-sm" onclick="UU('${n}')">Desbloquear</button>`:''}
+            ${u.locked?`<button class="btn btn-secondary btn-sm" onclick="UU('${n}')">🔓 Grupos</button>`:''}
+            ${u.kolocked?`<button class="btn btn-secondary btn-sm" onclick="UUK('${n}')" style="background:rgba(100,150,255,0.15);border-color:rgba(100,150,255,0.4);color:#7aadff;">🔓 Elim.</button>`:''}
             <button class="btn btn-success btn-sm" onclick="OPEN_EDIT('${n}')">✏️ Editar quiniela</button>
             <button class="btn btn-danger btn-sm" onclick="DEL('${n}')">Eliminar</button>
           </div>
@@ -3465,6 +3468,7 @@ window.SAKR=btn=>{
 
 window.SVP=()=>{const v=parseInt(document.getElementById('pinput').value)||0;const q=S.adminQ?getQ(S.adminQ):null;if(q)q.prize=v;save();render();};
 window.UU=n=>{if(confirm(`¿Desbloquear grupos de ${n}?`)){const q=S.adminQ?getQ(S.adminQ):null;if(q&&q.users[n]){q.users[n].locked=false;saveNow().then(()=>render());}}};
+window.UUK=n=>{if(confirm(`¿Desbloquear fase eliminatoria de ${n}?`)){const q=S.adminQ?getQ(S.adminQ):null;if(q&&q.users[n]){q.users[n].kolocked=false;saveNow().then(()=>render());}}};
 window.RESET_PIN=(n,qn)=>{
   if(!confirm('¿Resetear el PIN de '+n+'? La próxima vez que entre tendrá que crear uno nuevo.')) return;
   const q=getQ(qn);
