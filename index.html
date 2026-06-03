@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -8,7 +7,6 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#07071a;color:#fff;min-height:100vh;overscroll-behavior:none;transition:background .3s,color .3s;}
-  .no-anim,.no-anim *{transition:none!important;animation:none!important;}
 body.light-mode{background:#f0f2f8;color:#111;}
 body.light-mode :root,body.light-mode{--card:#ffffff;--card2:#e8eaf6;--border:rgba(0,0,0,0.15);--muted:rgba(0,0,0,0.55);}
 body.light-mode .header{background:linear-gradient(180deg,#1a1a6e,#0d0d40);}
@@ -502,32 +500,18 @@ const ADMIN_PASS='admin2026';
 let S={quinielas:{},cur:null,admin:false,tab:'grupos',adminQ:null};
 
 // ===================== FIREBASE =====================
-const _firebaseCfg={
+const _fbApp = firebase.initializeApp({
   apiKey: "AIzaSyAJDzRAGFPtz8tZbKeFQCXV9NPUIRB6F0U",
   authDomain: "quiniela-mundial-2026-41f26.firebaseapp.com",
   projectId: "quiniela-mundial-2026-41f26",
   storageBucket: "quiniela-mundial-2026-41f26.firebasestorage.app",
   messagingSenderId: "8594601103",
   appId: "1:8594601103:web:f56f85c807b930f4d32cfa"
-};
-const _cloudAvailable = typeof firebase!=='undefined' && firebase && typeof firebase.initializeApp==='function' && typeof firebase.firestore==='function';
-const _fbApp = _cloudAvailable ? firebase.initializeApp(_firebaseCfg) : null;
-const _db = _cloudAvailable ? firebase.firestore() : null;
+});
+const _db = firebase.firestore();
 const SK='q2026v6';
-  
+
 async function load(){
-  if(!_cloudAvailable || !_db){
-    try{
-      const raw=localStorage.getItem(SK);
-      if(raw){
-        const saved=JSON.parse(raw);
-        S.quinielas=saved.quinielas||{};
-        S.coadmins=saved.coadmins||{};
-      }
-    }catch(e){ console.error('Error cargando datos locales:',e); }
-    render();
-    return;
-  }
   try{
     const snap = await _db.collection('quinielas').doc(SK).get();
     if(snap.exists){
@@ -604,13 +588,6 @@ async function saveUserPreds(){
 }
 
 async function save(){
-   if(!_cloudAvailable || !_db){
-    try{
-      localStorage.setItem(SK,JSON.stringify({quinielas:S.quinielas,coadmins:S.coadmins||{}}));
-      _showSaveIndicator('saved');
-    }catch(e){ console.error('Error guardando local:',e); _showSaveIndicator('error'); }
-    return;
-  }
   return new Promise(resolve=>{
     if(_saveTimer) clearTimeout(_saveTimer);
     _showSaveIndicator('saving');
@@ -627,14 +604,6 @@ async function save(){
   });
 }
 async function saveNow(){
-  if(!_cloudAvailable || !_db){
-    _showSaveIndicator('saving');
-    try{
-      localStorage.setItem(SK,JSON.stringify({quinielas:S.quinielas,coadmins:S.coadmins||{}}));
-      _showSaveIndicator('saved');
-    }catch(e){ console.error('Error guardando local (now):',e); _showSaveIndicator('error'); }
-    return;
-  }
   if(_saveTimer){clearTimeout(_saveTimer);_saveTimer=null;}
   _showSaveIndicator('saving');
   // Also flush user preds immediately
@@ -1281,12 +1250,14 @@ function resolveKOTeam(pos, preds, koPreds){
     if(!kr||kr.h===''||kr.a===''||kr.h===undefined) return '?';
     const rh=parseInt(kr.h),ra=parseInt(kr.a);
     if(isNaN(rh)||isNaN(ra)) return '?';
-    // need to know who played
     const km=KO_MATCHES.find(x=>x.id===pid);
     if(!km) return '?';
     const ht=resolveKOTeam(km.hPos,preds,koPreds);
     const at=resolveKOTeam(km.aPos,preds,koPreds);
-    return rh>ra?ht:ra>rh?at:'?';
+    if(rh>ra) return ht;
+    if(ra>rh) return at;
+    // Draw — use penWin if set
+    return kr.penWin==='h'?ht:kr.penWin==='a'?at:'?';
   }
   const mPierde=pos.match(/^Pierde P(\d+)$/);
   if(mPierde){
@@ -1299,7 +1270,9 @@ function resolveKOTeam(pos, preds, koPreds){
     if(!km) return '?';
     const ht=resolveKOTeam(km.hPos,preds,koPreds);
     const at=resolveKOTeam(km.aPos,preds,koPreds);
-    return rh>ra?at:ra>rh?ht:'?';
+    if(rh>ra) return at;
+    if(ra>rh) return ht;
+    return kr.penWin==='h'?at:kr.penWin==='a'?ht:'?';
   }
   return pos;
 }
@@ -1416,26 +1389,10 @@ let _renderPending=false;
 function render(){
   if(_renderPending) return;
   _renderPending=true;
-const raf=(typeof requestAnimationFrame==='function')?requestAnimationFrame:(cb)=>setTimeout(cb,0);
-  raf(()=>{
+  requestAnimationFrame(()=>{
     _renderPending=false;
-    try{
-      _standingsCacheKey=Date.now()+'_r';
-      const root=document.getElementById('root');
-      if(!root) return;
-      root.innerHTML=buildHTML();
-    }catch(e){
-      console.error('Render error:',e);
-      const root=document.getElementById('root');
-      if(root){
-        root.innerHTML=`<div style="padding:16px;">
-          <div class="alert alert-e">
-            <strong>⚠️ Error al renderizar la app</strong><br>
-            <span style="font-size:11px;opacity:.9;">${(e&&e.message)||'Error desconocido'}</span>
-          </div>
-        </div>`;
-      }
-    }
+    _standingsCacheKey=Date.now()+'_r';
+    document.getElementById('root').innerHTML=buildHTML();
   });
 }
 
@@ -2089,7 +2046,8 @@ function buildEliminacion(){
       if(!kp||kp.h===''||kp.a==='') return false;
       const h=parseInt(kp.h),a=parseInt(kp.a);
       if(isNaN(h)||isNaN(a)) return false;
-      return h!==a||(kp.win&&kp.win!==''); // winner or penales selection
+      if(h!==a) return true; // clear winner from score
+      return !!(kp.penWin); // draw with penales winner selected
     });
   }
   function roundHasPenWinner(round){
@@ -2137,7 +2095,9 @@ function buildEliminacion(){
       const kp=kopreds[m.id]||{h:'',a:''};
       const ph=kp.h, pa=kp.a;
       const phn=ph===''?-1:parseInt(ph), pan=pa===''?-1:parseInt(pa);
-      const win=phn>=0&&pan>=0?(phn>pan?'h':pan>phn?'a':'d'):'';
+      // win: 'h'=local, 'a'=visitante, 'd'=empate(sin penales), ''=sin datos
+      // If draw and penWin set, the penWin button should be active
+      const win=phn>=0&&pan>=0?(phn>pan?'h':pan>phn?'a':(kp.penWin||'d')):'';
       const dis=koLocked?'disabled':'';
       const unknown=ht==='?'||at==='?';
       // Determine result color class (same logic as group stage cards)
@@ -2370,7 +2330,7 @@ function buildRanking(){
         <td><span class="bs bs-g">${isLocked?u.exact:'—'}</span></td>
         <td><span class="bs bs-y">${isLocked?u.winner:'—'}</span></td>
         <td><span class="bs bs-r">${isLocked?u.miss:'—'}</span></td>
-        <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>
+        <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>`;}).join('')}
         <td style="font-size:11px;">${(()=>{
           if(u.locked===false) return '<span style="color:var(--muted)">—</span>';
           const q2=getQ(qName);
@@ -2382,7 +2342,7 @@ function buildRanking(){
           const wrong=realChamp&&champ!==realChamp;
           return `<span style="color:${correct?'#69ff6e':wrong?'#ff8a8a':'#fff'}">${F(champ)} ${champ}</span>`;
         })()}</td>
-     </tr>`;}).join('')}
+      </tr>`}).join('')}
       </tbody>
     </table>
     </div>
@@ -3315,8 +3275,7 @@ window.SW=(id,win)=>{
     const v=Math.max(h,a,1);p.h=v;p.a=v;
   }
   save();
-  // Update DOM directly without re-render to avoid flash
-  document.body.classList.add('no-anim');
+  // Update DOM directly without re-render
   const card=document.querySelector('[data-match-id="'+id+'"]');
   if(card){
     const inps=card.querySelectorAll('.score-inp');
@@ -3332,7 +3291,6 @@ window.SW=(id,win)=>{
     if(pf) pf.style.width=Math.round((filled/TOTAL)*100)+'%';
   } else { render(); }
 };
-   requestAnimationFrame(()=>document.body.classList.remove('no-anim'));
 window.SAVE_PROGRESS=async()=>{
   const u=curUser(); if(!u||u.locked) return;
   _showSaveIndicator('saving');
@@ -3356,7 +3314,8 @@ window.SKO=(id,side,val)=>{
   const phn=p.h===''?-1:parseInt(p.h), pan=p.a===''?-1:parseInt(p.a);
   if(phn>=0&&pan>=0){
     if(phn!==pan){
-      // Winner defined — update this card's buttons AND re-render so next round updates
+      // Clear penWin since there's now a clear winner
+      p.penWin='';
       const win=phn>pan?'h':'a';
       const card=document.querySelector('[data-ko-match-id="'+id+'"]');
       if(card){
@@ -3364,29 +3323,36 @@ window.SKO=(id,side,val)=>{
           btn.classList.toggle('active',btn.getAttribute('data-win')===win);
         });
       }
-      // Re-render to cascade winner to next round
       render();
     } else {
-      // Draw (penales) — just sync buttons
+      // Draw — show penWin button active if already set, else no active
       const card=document.querySelector('[data-ko-match-id="'+id+'"]');
       if(card){
-        card.querySelectorAll('.ko-win-btn').forEach(btn=>btn.classList.remove('active'));
+        card.querySelectorAll('.ko-win-btn').forEach(btn=>{
+          btn.classList.toggle('active',btn.getAttribute('data-win')===(p.penWin||''));
+        });
       }
+      render(); // re-render so next round shows '?' until penWin is set
     }
   }
 };
 window.SWKO=(id,win)=>{
   const u=curUser();if(!u||u.kolocked)return;
-  if(window.event){window.event.preventDefault();window.event.stopPropagation();}
   if(!u.kopreds[id])u.kopreds[id]={h:'',a:''};
   const p=u.kopreds[id];
   const h=parseInt(p.h)>=0?parseInt(p.h)||0:0,a=parseInt(p.a)>=0?parseInt(p.a)||0:0;
-  if(win==='h'){
+  const isDraw = h===a && h>0;
+  if(isDraw){
+    // Keep the draw score and just record who won on penalties
+    p.penWin=win;
+  } else if(win==='h'){
     if(h>a){p.h=h;p.a=a;}
     else{p.h=Math.max(h,a)+1||1;p.a=Math.min(h,a)||0;}
+    p.penWin='';
   } else if(win==='a'){
     if(a>h){p.h=h;p.a=a;}
     else{p.h=Math.min(h,a)||0;p.a=Math.max(h,a)+1||1;}
+    p.penWin='';
   }
   save();
   // Update this card immediately then re-render so next round gets the winner
@@ -3902,28 +3868,7 @@ window.EXPORT_EXCEL = function(qName) {
   XLSX.writeFile(wb, `Quiniela_${qName}_${fecha}.xlsx`);
 };
 
-function showFatalError(err){
-  const root=document.getElementById('root');
-  if(!root) return;
-  const msg=(err&&err.message)?err.message:String(err||'Error desconocido');
-  root.innerHTML=`<div style="padding:16px;">
-    <div class="alert alert-e">
-      <strong>❌ Error crítico al iniciar</strong><br>
-      <span style="font-size:11px;opacity:.9;word-break:break-word;">${msg}</span>
-    </div>
-  </div>`;
-}
-
-window.addEventListener('error',e=>{
-  console.error('Global error:',e.error||e.message||e);
-  showFatalError(e.error||e.message||e);
-});
-window.addEventListener('unhandledrejection',e=>{
-  console.error('Unhandled promise rejection:',e.reason||e);
-  showFatalError(e.reason||e);
-});
-
-try{ load(); }catch(e){ console.error('Boot error:',e); showFatalError(e); }
+load();
 
 // Auto-refresh every 30 seconds when admin is viewing users
 setInterval(()=>{
