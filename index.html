@@ -638,15 +638,18 @@ function getResults(){
 }
 
 // ===================== GROUP CALC =====================
-// Cache for getGroupStandings — keyed by group+predObj reference
-const _standingsCache=new Map();
-let _standingsCacheKey=null;
-function _invalidateStandingsCache(){ _standingsCache.clear(); _standingsCacheKey=null; }
+// Cache for getGroupStandings — separated by prediction object so users never share standings
+let _standingsCache=new WeakMap();
+function _invalidateStandingsCache(){ _standingsCache=new WeakMap(); }
 
 function getGroupStandings(g, predsObj){
-  // Use predsObj identity as part of key (fast check)
-  const cacheKey=g+'_'+_standingsCacheKey;
-  if(_standingsCache.has(cacheKey)) return _standingsCache.get(cacheKey);
+  predsObj=predsObj||{};
+  let userCache=_standingsCache.get(predsObj);
+  if(!userCache){
+    userCache=new Map();
+    _standingsCache.set(predsObj,userCache);
+  }
+  if(userCache.has(g)) return userCache.get(g);
 
   const teams=GROUPS[g].map(t=>({t,pts:0,gf:0,ga:0,gd:0,w:0,d:0,l:0}));
   const matches=ALL.filter(m=>m.g===g);
@@ -669,7 +672,7 @@ function getGroupStandings(g, predsObj){
 }
 
 function getGroupPos(g, pos, preds){
-  const st=getGroupStandings(g,preds);
+ userCache.set(g, result);
   return st[pos-1]?st[pos-1].t:'?';
 }
 
@@ -1391,7 +1394,7 @@ function render(){
   _renderPending=true;
   requestAnimationFrame(()=>{
     _renderPending=false;
-    _standingsCacheKey=Date.now()+'_r';
+   _invalidateStandingsCache();
     document.getElementById('root').innerHTML=buildHTML();
   });
 }
