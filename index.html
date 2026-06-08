@@ -650,9 +650,10 @@ function _scoresCacheKey(matches, predsObj){
 function _invalidateStandingsCache(){
   _standingsCache=new Map();
   _thirdsCache=new Map();
+  }
 
 function getGroupStandings(g, predsObj){
-predsObj=predsObj||{};
+  predsObj=predsObj||{};
   const matches=ALL.filter(m=>m.g===g);
   const cacheKey=g+'|'+_scoresCacheKey(matches,predsObj);
   if(_standingsCache.has(cacheKey)) return _standingsCache.get(cacheKey);
@@ -677,7 +678,7 @@ predsObj=predsObj||{};
 }
 
 function getGroupPos(g, pos, preds){
- userCache.set(g, result);
+   const st=getGroupStandings(g,preds);
   return st[pos-1]?st[pos-1].t:'?';
 }
 
@@ -1229,6 +1230,7 @@ function assignThirds(preds){
 
 // Cache thirds assignment by the actual score values, not by user object identity
 let _thirdsCache=new Map();
+let _realThirdsCache=null;
 function getThirdsAssignment(preds){
  const cacheKey=_scoresCacheKey(ALL,preds);
   if(_thirdsCache.has(cacheKey)) return _thirdsCache.get(cacheKey);
