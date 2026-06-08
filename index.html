@@ -638,21 +638,26 @@ function getResults(){
 }
 
 // ===================== GROUP CALC =====================
-// Cache for getGroupStandings — separated by prediction object so users never share standings
-let _standingsCache=new WeakMap();
-function _invalidateStandingsCache(){ _standingsCache=new WeakMap(); }
+// Cache for getGroupStandings — keyed by group + that user's saved scores
+let _standingsCache=new Map();
+function _scoresCacheKey(matches, predsObj){
+  predsObj=predsObj||{};
+  return matches.map(m=>{
+    const p=predsObj[m.id]||{};
+    return m.id+':'+(p.h??'')+'-'+(p.a??'');
+  }).join('|');
+}
+function _invalidateStandingsCache(){
+  _standingsCache=new Map();
+  _thirdsCache=new Map();
 
 function getGroupStandings(g, predsObj){
-  predsObj=predsObj||{};
-  let userCache=_standingsCache.get(predsObj);
-  if(!userCache){
-    userCache=new Map();
-    _standingsCache.set(predsObj,userCache);
-  }
-  if(userCache.has(g)) return userCache.get(g);
+predsObj=predsObj||{};
+  const matches=ALL.filter(m=>m.g===g);
+  const cacheKey=g+'|'+_scoresCacheKey(matches,predsObj);
+  if(_standingsCache.has(cacheKey)) return _standingsCache.get(cacheKey);
 
   const teams=GROUPS[g].map(t=>({t,pts:0,gf:0,ga:0,gd:0,w:0,d:0,l:0}));
-  const matches=ALL.filter(m=>m.g===g);
   matches.forEach(m=>{
     const p=predsObj[m.id];
     if(!p||p.h===''||p.h===undefined||p.a===''||p.a===undefined) return;
@@ -1222,14 +1227,14 @@ function assignThirds(preds){
   return assigned;
 }
 
-// Cache thirds assignment
-let _thirdsCache=null, _thirdsPreds=null;
-let _realThirdsCache=null;
+// Cache thirds assignment by the actual score values, not by user object identity
+let _thirdsCache=new Map();
 function getThirdsAssignment(preds){
-  if(_thirdsPreds===preds) return _thirdsCache;
-  _thirdsPreds=preds;
-  _thirdsCache=assignThirds(preds);
-  return _thirdsCache;
+ const cacheKey=_scoresCacheKey(ALL,preds);
+  if(_thirdsCache.has(cacheKey)) return _thirdsCache.get(cacheKey);
+  const assigned=assignThirds(preds);
+  _thirdsCache.set(cacheKey,assigned);
+  return assigned;
 }
 
 
