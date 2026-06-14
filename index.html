@@ -2400,8 +2400,10 @@ async function createRankingImageBlob(qName){
   _roundRect(ctx,60,y,W-120,130,28);ctx.fillStyle='rgba(255,215,0,0.12)';ctx.fill();ctx.strokeStyle='rgba(255,215,0,0.34)';ctx.lineWidth=2;ctx.stroke();
   ctx.textAlign='center';ctx.fillStyle='#FFD700';ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('ÚLTIMO RESULTADO PUBLICADO',W/2,y+34);
   if(latest){
-    ctx.fillStyle='#fff';ctx.font='900 40px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText(`${F(latest.teamH)} ${latest.teamH}   ${latest.result.h} - ${latest.result.a}   ${F(latest.teamA)} ${latest.teamA}`,W/2,y+78);
-    ctx.fillStyle='rgba(255,255,255,0.68)';ctx.font='600 20px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText(formatLatestResultMeta(latest),W/2,y+110);
+    _fitCanvasText(ctx,`${F(latest.teamH)} ${latest.teamH}`,250,y+80,330,34,'900','center','#fff');
+    _fitCanvasText(ctx,`${latest.result.h} - ${latest.result.a}`,W/2,y+82,190,46,'900','center','#FFD700');
+    _fitCanvasText(ctx,`${F(latest.teamA)} ${latest.teamA}`,830,y+80,330,34,'900','center','#fff');
+    _fitCanvasText(ctx,formatLatestResultMeta(latest),W/2,y+110,W-180,20,'600','center','rgba(255,255,255,0.68)');
   }else{
     ctx.fillStyle='rgba(255,255,255,0.68)';ctx.font='600 28px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('Aún no hay resultados publicados',W/2,y+82);
   }
@@ -2528,16 +2530,9 @@ async function createRankingImageBlob(qName){
   let y=146;
   _roundRect(ctx,60,y,W-120,130,28);ctx.fillStyle='rgba(255,215,0,0.12)';ctx.fill();ctx.strokeStyle='rgba(255,215,0,0.34)';ctx.lineWidth=2;ctx.stroke();
   ctx.textAlign='center';ctx.fillStyle='#FFD700';ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('ÚLTIMO RESULTADO PUBLICADO',W/2,y+34);
-if(latest){
-    ctx.textAlign='right';ctx.fillStyle='#fff';ctx.font='900 34px system-ui, -apple-system, Segoe UI, sans-serif';
-    ctx.fillText(`${F(latest.teamH)} ${latest.teamH}`,W/2-70,y+80);
-    ctx.textAlign='center';ctx.fillStyle='#FFD700';ctx.font='900 40px system-ui, -apple-system, Segoe UI, sans-serif';
-    ctx.fillText(`${latest.result.h} - ${latest.result.a}`,W/2,y+80);
-    ctx.textAlign='left';ctx.fillStyle='#fff';ctx.font='900 34px system-ui, -apple-system, Segoe UI, sans-serif';
-    ctx.fillText(`${F(latest.teamA)} ${latest.teamA}`,W/2+70,y+80);
-    ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.68)';ctx.font='600 20px system-ui, -apple-system, Segoe UI, sans-serif';
-    ctx.fillText(formatLatestResultMeta(latest),W/2,y+110);
-  }
+  if(latest){
+    ctx.fillStyle='#fff';ctx.font='900 40px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText(`${F(latest.teamH)} ${latest.teamH}   ${latest.result.h} - ${latest.result.a}   ${F(latest.teamA)} ${latest.teamA}`,W/2,y+78);
+    ctx.fillStyle='rgba(255,255,255,0.68)';ctx.font='600 20px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText(formatLatestResultMeta(latest),W/2,y+110);
   }else{
     ctx.fillStyle='rgba(255,255,255,0.68)';ctx.font='600 28px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('Aún no hay resultados publicados',W/2,y+82);
   }
