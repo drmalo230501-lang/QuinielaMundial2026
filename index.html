@@ -170,7 +170,7 @@ body.light-mode .alert-w{background:rgba(255,193,7,0.15);color:#6d4c00;}
 .bs-r{background:rgba(220,50,50,0.2);color:#ff8a8a;}
 
   
-  /* RANKING SHARE */
+/* RANKING SHARE */
 .ranking-actions{display:flex;gap:8px;padding:0 10px 10px;align-items:stretch;}
 .ranking-actions .btn{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;}
 .latest-result-card{margin:0 10px 10px;padding:12px;border:1px solid rgba(255,215,0,0.28);border-radius:14px;background:linear-gradient(135deg,rgba(255,215,0,0.12),rgba(26,110,245,0.08));}
@@ -180,6 +180,9 @@ body.light-mode .alert-w{background:rgba(255,193,7,0.15);color:#6d4c00;}
 .latest-result-flag{display:block;font-size:24px;margin-bottom:2px;}
 .latest-result-score{font-size:24px;font-weight:900;color:#fff;font-variant-numeric:tabular-nums;white-space:nowrap;}
 .latest-result-meta{margin-top:7px;text-align:center;font-size:10px;color:var(--muted);}
+.home-ranking-title{display:flex;align-items:center;gap:8px;margin:12px 0 8px;font-size:14px;font-weight:900;color:var(--gold);}
+.home-ranking-title::after{content:'';flex:1;height:1px;background:rgba(255,215,0,0.25);}
+.home-ranking-note{font-size:10px;color:var(--muted);line-height:1.4;margin:-2px 0 10px;}
   
 /* PRIZE BANNER */
 .prize-banner{background:linear-gradient(135deg,#1a1500,#2d2200);border:2px solid var(--gold);border-radius:16px;padding:16px;text-align:center;margin:0 10px 12px;}
@@ -1812,6 +1815,7 @@ function buildLogin(){
         <div id="lerr" style="margin-top:8px;"></div>
       </div>
       ${qNames.length===0?`<div class="alert alert-w">⚠️ Aún no hay quinielas creadas. El administrador debe crear una primero.</div>`:''}
+        ${buildHomeRankingSection(qNames)}
     </div>`;
   }
 
@@ -2363,6 +2367,151 @@ function _drawCanvasText(ctx,text,x,y,maxWidth,lineHeight){
   lines.forEach((l,i)=>ctx.fillText(l,x,y+i*lineHeight));
   return lines.length*lineHeight;
 }
+function _fitCanvasText(ctx,text,x,y,maxWidth,fontSize,fontWeight='800',align='center',color='#fff'){
+  let size=fontSize;
+  let value=String(text||'');
+  ctx.textAlign=align;ctx.fillStyle=color;
+  do{
+    ctx.font=`${fontWeight} ${size}px system-ui, -apple-system, Segoe UI, sans-serif`;
+    if(ctx.measureText(value).width<=maxWidth||size<=18) break;
+    size-=2;
+  }while(size>18);
+  while(ctx.measureText(value).width>maxWidth&&value.length>4){
+    value=value.slice(0,-2).trim()+'…';
+  }
+  ctx.fillText(value,x,y);
+}
+function _downloadBlob(blob,filename){
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1200);
+}
+
+async function createRankingImageBlob(qName){
+  const q=getQ(qName);const rank=getRanking(qName);const latest=getLatestPublishedResult();
+  const rowH=54,maxRows=Math.min(rank.length,12),W=1080,H=430+(maxRows*rowH)+(rank.length>maxRows?46:0);
+  const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;
+  const ctx=canvas.getContext('2d');
+  const grd=ctx.createLinearGradient(0,0,W,H);grd.addColorStop(0,'#07071a');grd.addColorStop(.55,'#10103a');grd.addColorStop(1,'#1a1500');ctx.fillStyle=grd;ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='rgba(255,215,0,0.08)';ctx.beginPath();ctx.arc(920,80,220,0,Math.PI*2);ctx.fill();
+  ctx.textAlign='center';ctx.fillStyle='#FFD700';ctx.font='900 46px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('🏆 Ranking Quiniela Mundial 2026',W/2,74);
+  ctx.fillStyle='rgba(255,255,255,0.72)';ctx.font='600 24px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText(qName||'Quiniela',W/2,112);
+
+  let y=146;
+  _roundRect(ctx,60,y,W-120,130,28);ctx.fillStyle='rgba(255,215,0,0.12)';ctx.fill();ctx.strokeStyle='rgba(255,215,0,0.34)';ctx.lineWidth=2;ctx.stroke();
+  ctx.textAlign='center';ctx.fillStyle='#FFD700';ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('ÚLTIMO RESULTADO PUBLICADO',W/2,y+34);
+  if(latest){
+    _fitCanvasText(ctx,`${F(latest.teamH)} ${latest.teamH}`,250,y+80,330,34,'900','center','#fff');
+    _fitCanvasText(ctx,`${latest.result.h} - ${latest.result.a}`,W/2,y+82,190,46,'900','center','#FFD700');
+    _fitCanvasText(ctx,`${F(latest.teamA)} ${latest.teamA}`,830,y+80,330,34,'900','center','#fff');
+    _fitCanvasText(ctx,formatLatestResultMeta(latest),W/2,y+110,W-180,20,'600','center','rgba(255,255,255,0.68)');
+  }else{
+    ctx.fillStyle='rgba(255,255,255,0.68)';ctx.font='600 28px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('Aún no hay resultados publicados',W/2,y+82);
+  }
+
+  y=314;
+  ctx.textAlign='left';
+  const cols={pos:90,name:170,pts:650,exact:760,winner:860,miss:950};
+  ctx.fillStyle='#0a0a25';_roundRect(ctx,60,y,W-120,48,18);ctx.fill();
+  ctx.fillStyle='#FFD700';ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';
+  ctx.fillText('#',cols.pos,y+31);ctx.fillText('Jugador',cols.name,y+31);ctx.fillText('Pts',cols.pts,y+31);ctx.fillText('✅',cols.exact,y+31);ctx.fillText('✔',cols.winner,y+31);ctx.fillText('❌',cols.miss,y+31);
+  y+=58;
+  const topPts=rank.length?rank[0].total:0,medals=['🥇','🥈','🥉'];
+  rank.slice(0,maxRows).forEach((u,i)=>{
+    const locked=u.locked!==false;
+    ctx.fillStyle=i===0?'rgba(255,215,0,0.16)':i===1?'rgba(100,150,255,0.12)':i===2?'rgba(180,100,50,0.12)':'rgba(255,255,255,0.045)';
+    _roundRect(ctx,60,y,W-120,rowH-8,16);ctx.fill();
+    ctx.fillStyle=locked?'#fff':'rgba(255,255,255,0.52)';ctx.font='800 24px system-ui, -apple-system, Segoe UI, sans-serif';
+    ctx.fillText(locked?(medals[i]||String(i+1)):'—',cols.pos,y+32);
+    ctx.fillStyle=i===0?'#FFD700':'#fff';ctx.fillText(u.n,cols.name,y+32);
+    ctx.fillStyle='#FFD700';ctx.font='900 28px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText(locked?String(u.total):'—',cols.pts,y+34);
+    ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillStyle='#69ff6e';ctx.fillText(locked?String(u.exact):'—',cols.exact,y+32);
+    ctx.fillStyle='#FFD700';ctx.fillText(locked?String(u.winner):'—',cols.winner,y+32);
+    ctx.fillStyle='#ff8a8a';ctx.fillText(locked?String(u.miss):'—',cols.miss,y+32);
+    if(locked&&i>0){ctx.fillStyle='rgba(255,255,255,0.45)';ctx.font='600 18px system-ui';ctx.fillText(`-${topPts-u.total}`,1000,y+31);}
+    y+=rowH;
+  });
+  if(rank.length>maxRows){ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.58)';ctx.font='600 22px system-ui';ctx.fillText(`+ ${rank.length-maxRows} participantes más`,W/2,y+26);}
+  ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · Exacto +2pts · Ganador +1pt`,W/2,H-24);
+  return await new Promise(resolve=>canvas.toBlob(resolve,'image/png',0.95));
+}
+
+window.SHARE_RANKING=async qName=>{
+  try{
+    const blob=await createRankingImageBlob(qName);
+    if(!blob) throw new Error('No se pudo generar la imagen');
+    const safe=(qName||'ranking').replace(/[^a-z0-9áéíóúñ_-]+/gi,'-').replace(/^-+|-+$/g,'').toLowerCase();
+    const file=new File([blob],`ranking-${safe||'quiniela'}.png`,{type:'image/png'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      await navigator.share({title:'Ranking Quiniela Mundial 2026',text:'Así va el ranking de la quiniela en este momento.',files:[file]});
+      showToast('📤 Ranking listo para compartir','info',2500);
+    }else{
+      _downloadBlob(blob,file.name);
+      showToast('🖼️ Imagen descargada. Puedes enviarla por WhatsApp o redes.','info',4500);
+    }
+  }catch(e){
+    console.error(e);
+    showToast('⚠️ No se pudo compartir la imagen del ranking','miss',3500);
+  }
+};
+
+  function getLatestPublishedResult(){
+  const R=getResults();
+  const items=[];
+  (ALL||[]).forEach((m,idx)=>{
+    const r=(R.results||{})[m.id];
+    if(r&&r.h!==''&&r.h!==undefined&&r.a!==''&&r.a!==undefined){
+      items.push({type:'group',match:m,result:r,teamH:m.h,teamA:m.a,order:idx,ts:r._ts||0});
+    }
+  });
+  (KO_MATCHES||[]).forEach((m,idx)=>{
+    const r=(R.koresults||{})[m.id];
+    if(r&&r.h!==''&&r.h!==undefined&&r.a!==''&&r.a!==undefined){
+      const teamH=resolveKOTeam(m.hPos,R.results||{},R.koresults||{});
+      const teamA=resolveKOTeam(m.aPos,R.results||{},R.koresults||{});
+      items.push({type:'ko',match:m,result:r,teamH:teamH==='?'?'Por definir':teamH,teamA:teamA==='?'?'Por definir':teamA,order:1000+idx,ts:r._ts||0});
+    }
+  });
+  if(!items.length) return null;
+  items.sort((a,b)=>(b.ts||0)-(a.ts||0)||b.order-a.order);
+  return items[0];
+}
+
+function formatLatestResultMeta(item){
+  if(!item) return 'Sin resultados publicados todavía';
+  const m=item.match;
+  const ts=item.result&&item.result._ts;
+  const dateTxt=ts?new Date(ts).toLocaleString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):(m.d||'');
+  const phase=item.type==='ko'?(ROUND_LABELS[m.round]||m.round):`Grupo ${m.g}`;
+  return `${phase}${m.label?` · ${m.label}`:''} · ${dateTxt}`;
+}
+
+function buildLatestResultCard(){
+  const item=getLatestPublishedResult();
+  if(!item){
+    return `<div class="latest-result-card"><div class="latest-result-label">Último resultado publicado</div><div style="text-align:center;color:var(--muted);font-size:12px;padding:8px 0;">⏳ Aún no hay resultados publicados</div></div>`;
+  }
+  const rh=parseInt(item.result.h), ra=parseInt(item.result.a);
+  return `<div class="latest-result-card" id="latest-result-ranking">
+    <div class="latest-result-label">⚽ Último resultado publicado</div>
+    <div class="latest-result-main">
+      <div class="latest-result-team"><span class="latest-result-flag">${F(item.teamH)}</span><strong>${item.teamH}</strong></div>
+      <div class="latest-result-score">${rh} - ${ra}</div>
+      <div class="latest-result-team"><span class="latest-result-flag">${F(item.teamA)}</span><strong>${item.teamA}</strong></div>
+    </div>
+    <div class="latest-result-meta">${formatLatestResultMeta(item)}</div>
+  </div>`;
+}
+
+function _roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
+}
+function _drawCanvasText(ctx,text,x,y,maxWidth,lineHeight){
+  const words=String(text||'').split(' ');let line='',lines=[];
+  words.forEach(word=>{const test=line?line+' '+word:word;if(ctx.measureText(test).width>maxWidth&&line){lines.push(line);line=word;}else line=test;});
+  if(line) lines.push(line);
+  lines.forEach((l,i)=>ctx.fillText(l,x,y+i*lineHeight));
+  return lines.length*lineHeight;
+}
 function _downloadBlob(blob,filename){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1200);
@@ -2505,6 +2654,58 @@ function buildRanking(){
   </div>
   ${buildPointsChart(qName)}`;
 }
+  function buildHomeRankingSection(qNames){
+  const names=qNames&&qNames.length?qNames:Object.keys(S.quinielas).filter(k=>k!=='__results__'&&k!=='__coadmins__');
+  if(!names.length) return '';
+  return `<div class="home-ranking-title">🏅 Ranking público</div>
+    <div class="home-ranking-note">Consulta el ranking antes de iniciar sesión, toca un jugador para ver sus resultados y comparte la imagen actual de cualquier quiniela.</div>
+    ${names.map(qn=>buildPublicRankingCard(qn)).join('')}`;
+}
+
+function buildPublicRankingCard(qName){
+  const q=getQ(qName); if(!q) return '';
+  const rank=getRanking(qName);
+  const total=rank.length*(q.prize||0);
+  const topPts=rank.length>0?rank[0].total:0;
+  const medals=['🥇','🥈','🥉'];
+  return `<div class="card" style="margin:0 0 12px;">
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
+      <span>🏆 ${qName}</span>
+      <span style="font-size:11px;color:var(--muted);white-space:nowrap;">$${total.toLocaleString()}</span>
+    </div>
+    ${buildLatestResultCard()}
+    <div class="ranking-actions" style="padding:0 0 10px;">
+      <button class="btn btn-primary btn-sm" onclick="SHARE_RANKING(decodeURIComponent('${encodeURIComponent(qName)}'))">📤 Compartir imagen</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="rank-table">
+        <thead><tr>
+          <th>#</th><th style="text-align:left;">Jugador</th><th>Pts</th><th>✅</th><th>✔</th><th>❌</th><th>vs 1°</th>
+        </tr></thead>
+        <tbody>
+          ${rank.length===0?`<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px;">Sin participantes guardados</td></tr>`:
+          rank.map((u,i)=>{
+            const isLocked=u.locked!==false;
+            const rowCls=isLocked?(i===0?'top1':i===1?'top2':i===2?'top3':''):'';
+            const pos=isLocked?i+1:'—';
+            const medal=isLocked&&i<3?medals[i]:null;
+            return `<tr class="${rowCls}" style="${!isLocked?'opacity:0.6;':''}">
+              <td style="font-size:14px;">${medal||pos}</td>
+              <td><strong style="cursor:pointer;text-decoration:underline dotted;color:var(--gold);" onclick="VIEW_PROFILE('${u.n}','${qName}')">${u.n}</strong>${!isLocked?'<span style="font-size:9px;color:var(--muted);margin-left:3px;">✏️</span>':''}</td>
+              <td class="pts-big">${isLocked?u.total:'—'}</td>
+              <td><span class="bs bs-g">${isLocked?u.exact:'—'}</span></td>
+              <td><span class="bs bs-y">${isLocked?u.winner:'—'}</span></td>
+              <td><span class="bs bs-r">${isLocked?u.miss:'—'}</span></td>
+              <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div style="padding-top:8px;font-size:10px;color:var(--muted);">✅ Exacto +2pts · ✔ Ganador +1pt · toca un jugador para ver su detalle</div>
+  </div>`;
+}
+
 
 function buildPointsChart(qName){
   const q=getQ(qName); if(!q) return '';
