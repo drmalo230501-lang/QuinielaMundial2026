@@ -2651,6 +2651,7 @@ async function createRankingImageBlob(qName){
   });
   if(rank.length>maxRows){ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.58)';ctx.font='600 22px system-ui';ctx.fillText(`+ ${rank.length-maxRows} participantes más`,W/2,y+26);}
  ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · Desempate: correctos, exactos y fallados; empates comparten lugar`,W/2,H-24);
+  return await new Promise(resolve=>canvas.toBlob(resolve,'image/png',0.95));
 }
 
 window.SHARE_RANKING=async qName=>{
