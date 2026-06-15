@@ -2436,14 +2436,43 @@ function drawRankingMove(ctx,u,x,y){
   ctx.fillText(txt,x,y);
 }
 function _drawLatestResultTeam(ctx,flag,name,x,y,maxWidth){
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x-(maxWidth/2),y-38,maxWidth,82);
+  ctx.clip();
   ctx.textAlign='center';
   ctx.fillStyle='#fff';
+   ctx.textBaseline='alphabetic';
   ctx.font='900 36px system-ui, -apple-system, Segoe UI, sans-serif';
   ctx.fillText(flag,x,y);
   _fitCanvasText(ctx,name,x,y+28,maxWidth,24,'800','center','#fff');
+   ctx.restore();
 }
 function _drawLatestResultScore(ctx,score,x,y,maxWidth){
+  ctx.save();
+  ctx.textBaseline='middle';
   _fitCanvasText(ctx,score,x,y,maxWidth,46,'900','center','#FFD700');
+  ctx.restore();
+}
+function _drawLatestResultCanvas(ctx,latest,cardX,cardY,cardW){
+  const centerX=cardX+(cardW/2);
+  const scoreW=190;
+  const gap=34;
+  const sidePad=54;
+  const scoreX=centerX;
+  const scoreLeft=scoreX-(scoreW/2);
+  const scoreRight=scoreX+(scoreW/2);
+  const leftX1=cardX+sidePad;
+  const leftX2=scoreLeft-gap;
+  const rightX1=scoreRight+gap;
+  const rightX2=cardX+cardW-sidePad;
+  const leftW=Math.max(120,leftX2-leftX1);
+  const rightW=Math.max(120,rightX2-rightX1);
+  const teamY=cardY+68;
+  const scoreText=`${latest.result.h} - ${latest.result.a}`;
+  _drawLatestResultTeam(ctx,F(latest.teamH),latest.teamH,leftX1+(leftW/2),teamY,leftW);
+  _drawLatestResultScore(ctx,scoreText,scoreX,cardY+90,scoreW);
+  _drawLatestResultTeam(ctx,F(latest.teamA),latest.teamA,rightX1+(rightW/2),teamY,rightW);
 }
 
 function rankingMoveText(u){
@@ -2486,10 +2515,7 @@ async function createRankingImageBlob(qName){
   _roundRect(ctx,60,y,W-120,150,28);ctx.fillStyle='rgba(255,215,0,0.12)';ctx.fill();ctx.strokeStyle='rgba(255,215,0,0.34)';ctx.lineWidth=2;ctx.stroke();
   ctx.textAlign='center';ctx.fillStyle='#FFD700';ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('ÚLTIMO RESULTADO PUBLICADO',W/2,y+34);
   if(latest){
- const scoreText=`${latest.result.h} - ${latest.result.a}`;
-    _drawLatestResultTeam(ctx,F(latest.teamH),latest.teamH,310,y+68,240);
-    _drawLatestResultScore(ctx,scoreText,W/2,y+90,170);
-    _drawLatestResultTeam(ctx,F(latest.teamA),latest.teamA,770,y+68,240);
+ _drawLatestResultCanvas(ctx,latest,60,y,W-120);
     _fitCanvasText(ctx,formatLatestResultMeta(latest),W/2,y+128,W-180,20,'600','center','rgba(255,255,255,0.68)');
   }else{
     ctx.fillStyle='rgba(255,255,255,0.68)';ctx.font='600 28px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('Aún no hay resultados publicados',W/2,y+88);
@@ -2619,10 +2645,7 @@ async function createRankingImageBlob(qName){
   _roundRect(ctx,60,y,W-120,150,28);ctx.fillStyle='rgba(255,215,0,0.12)';ctx.fill();ctx.strokeStyle='rgba(255,215,0,0.34)';ctx.lineWidth=2;ctx.stroke();
   ctx.textAlign='center';ctx.fillStyle='#FFD700';ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('ÚLTIMO RESULTADO PUBLICADO',W/2,y+34);
   if(latest){
-  const scoreText=`${latest.result.h} - ${latest.result.a}`;
-    _drawLatestResultTeam(ctx,F(latest.teamH),latest.teamH,310,y+68,240);
-    _drawLatestResultScore(ctx,scoreText,W/2,y+90,170);
-    _drawLatestResultTeam(ctx,F(latest.teamA),latest.teamA,770,y+68,240);
+  _drawLatestResultCanvas(ctx,latest,60,y,W-120);
     _fitCanvasText(ctx,formatLatestResultMeta(latest),W/2,y+128,W-180,20,'600','center','rgba(255,255,255,0.68)');
   }else{
     ctx.fillStyle='rgba(255,255,255,0.68)';ctx.font='600 28px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('Aún no hay resultados publicados',W/2,y+88);
