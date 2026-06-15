@@ -2474,7 +2474,7 @@ function _downloadBlob(blob,filename){
 
 async function createRankingImageBlob(qName){
   const q=getQ(qName);const rank=getRanking(qName);const latest=getLatestPublishedResult();
-  const rowH=54,maxRows=Math.min(rank.length,12),W=1080,H=430+(maxRows*rowH)+(rank.length>maxRows?46:0);
+  const rowH=54,maxRows=Math.min(rank.length,12),W=1080,H=450+(maxRows*rowH)+(rank.length>maxRows?46:0);
   const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;
   const ctx=canvas.getContext('2d');
   const grd=ctx.createLinearGradient(0,0,W,H);grd.addColorStop(0,'#07071a');grd.addColorStop(.55,'#10103a');grd.addColorStop(1,'#1a1500');ctx.fillStyle=grd;ctx.fillRect(0,0,W,H);
@@ -2483,18 +2483,19 @@ async function createRankingImageBlob(qName){
   ctx.fillStyle='rgba(255,255,255,0.72)';ctx.font='600 24px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText(qName||'Quiniela',W/2,112);
 
   let y=146;
-  _roundRect(ctx,60,y,W-120,130,28);ctx.fillStyle='rgba(255,215,0,0.12)';ctx.fill();ctx.strokeStyle='rgba(255,215,0,0.34)';ctx.lineWidth=2;ctx.stroke();
+  _roundRect(ctx,60,y,W-120,150,28);ctx.fillStyle='rgba(255,215,0,0.12)';ctx.fill();ctx.strokeStyle='rgba(255,215,0,0.34)';ctx.lineWidth=2;ctx.stroke();
   ctx.textAlign='center';ctx.fillStyle='#FFD700';ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('ÚLTIMO RESULTADO PUBLICADO',W/2,y+34);
   if(latest){
- _fitCanvasText(ctx,`${F(latest.teamH)} ${latest.teamH}`,390,y+80,280,30,'900','right','#fff');
-    _fitCanvasText(ctx,`${latest.result.h} - ${latest.result.a}`,W/2,y+82,180,46,'900','center','#FFD700');
-    _fitCanvasText(ctx,`${F(latest.teamA)} ${latest.teamA}`,690,y+80,280,30,'900','left','#fff');
-    _fitCanvasText(ctx,formatLatestResultMeta(latest),W/2,y+110,W-180,20,'600','center','rgba(255,255,255,0.68)');
+ const scoreText=`${latest.result.h} - ${latest.result.a}`;
+    _drawLatestResultTeam(ctx,F(latest.teamH),latest.teamH,310,y+68,240);
+    _drawLatestResultScore(ctx,scoreText,W/2,y+90,170);
+    _drawLatestResultTeam(ctx,F(latest.teamA),latest.teamA,770,y+68,240);
+    _fitCanvasText(ctx,formatLatestResultMeta(latest),W/2,y+128,W-180,20,'600','center','rgba(255,255,255,0.68)');
   }else{
-    ctx.fillStyle='rgba(255,255,255,0.68)';ctx.font='600 28px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('Aún no hay resultados publicados',W/2,y+82);
+    ctx.fillStyle='rgba(255,255,255,0.68)';ctx.font='600 28px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('Aún no hay resultados publicados',W/2,y+88);
   }
 
-  y=314;
+  y=334;
   ctx.textAlign='left';
   const cols={pos:90,name:170,pts:650,exact:760,winner:860,miss:950};
   ctx.fillStyle='#0a0a25';_roundRect(ctx,60,y,W-120,48,18);ctx.fill();
@@ -2606,7 +2607,7 @@ function _downloadBlob(blob,filename){
 
 async function createRankingImageBlob(qName){
   const q=getQ(qName);const rank=getRanking(qName);const latest=getLatestPublishedResult();
-  const rowH=54,maxRows=Math.min(rank.length,12),W=1080,H=430+(maxRows*rowH)+(rank.length>maxRows?46:0);
+  const rowH=54,maxRows=Math.min(rank.length,12),W=1080,H=450+(maxRows*rowH)+(rank.length>maxRows?46:0);
   const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;
   const ctx=canvas.getContext('2d');
   const grd=ctx.createLinearGradient(0,0,W,H);grd.addColorStop(0,'#07071a');grd.addColorStop(.55,'#10103a');grd.addColorStop(1,'#1a1500');ctx.fillStyle=grd;ctx.fillRect(0,0,W,H);
@@ -2615,18 +2616,19 @@ async function createRankingImageBlob(qName){
   ctx.fillStyle='rgba(255,255,255,0.72)';ctx.font='600 24px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText(qName||'Quiniela',W/2,112);
 
   let y=146;
-  _roundRect(ctx,60,y,W-120,130,28);ctx.fillStyle='rgba(255,215,0,0.12)';ctx.fill();ctx.strokeStyle='rgba(255,215,0,0.34)';ctx.lineWidth=2;ctx.stroke();
+  _roundRect(ctx,60,y,W-120,150,28);ctx.fillStyle='rgba(255,215,0,0.12)';ctx.fill();ctx.strokeStyle='rgba(255,215,0,0.34)';ctx.lineWidth=2;ctx.stroke();
   ctx.textAlign='center';ctx.fillStyle='#FFD700';ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('ÚLTIMO RESULTADO PUBLICADO',W/2,y+34);
   if(latest){
-  _fitCanvasText(ctx,`${F(latest.teamH)} ${latest.teamH}`,390,y+80,280,30,'900','right','#fff');
-    _fitCanvasText(ctx,`${latest.result.h} - ${latest.result.a}`,W/2,y+82,180,46,'900','center','#FFD700');
-   _fitCanvasText(ctx,`${F(latest.teamA)} ${latest.teamA}`,690,y+80,280,30,'900','left','#fff');
-    _fitCanvasText(ctx,formatLatestResultMeta(latest),W/2,y+110,W-180,20,'600','center','rgba(255,255,255,0.68)');
+  const scoreText=`${latest.result.h} - ${latest.result.a}`;
+    _drawLatestResultTeam(ctx,F(latest.teamH),latest.teamH,310,y+68,240);
+    _drawLatestResultScore(ctx,scoreText,W/2,y+90,170);
+    _drawLatestResultTeam(ctx,F(latest.teamA),latest.teamA,770,y+68,240);
+    _fitCanvasText(ctx,formatLatestResultMeta(latest),W/2,y+128,W-180,20,'600','center','rgba(255,255,255,0.68)');
   }else{
-    ctx.fillStyle='rgba(255,255,255,0.68)';ctx.font='600 28px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('Aún no hay resultados publicados',W/2,y+82);
+    ctx.fillStyle='rgba(255,255,255,0.68)';ctx.font='600 28px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('Aún no hay resultados publicados',W/2,y+88);
   }
 
-  y=314;
+  y=334;
   ctx.textAlign='left';
   const cols={pos:90,name:170,pts:650,exact:760,winner:860,miss:950};
   ctx.fillStyle='#0a0a25';_roundRect(ctx,60,y,W-120,48,18);ctx.fill();
