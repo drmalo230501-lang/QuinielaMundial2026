@@ -2413,6 +2413,37 @@ function drawRankingMove(ctx,u,x,y){
   ctx.font='900 20px system-ui, -apple-system, Segoe UI, sans-serif';
   ctx.fillText(txt,x,y);
 }
+function _drawLatestResultTeam(ctx,flag,name,x,y,maxWidth){
+  ctx.textAlign='center';
+  ctx.fillStyle='#fff';
+  ctx.font='900 36px system-ui, -apple-system, Segoe UI, sans-serif';
+  ctx.fillText(flag,x,y);
+  _fitCanvasText(ctx,name,x,y+28,maxWidth,24,'800','center','#fff');
+}
+function _drawLatestResultScore(ctx,score,x,y,maxWidth){
+  _fitCanvasText(ctx,score,x,y,maxWidth,46,'900','center','#FFD700');
+}
+
+function rankingMoveText(u){
+  const m=u&&u.move;
+  if(!m||!m.places) return '';
+  return `${m.dir==='up'?'▲':'▼'}${Math.abs(m.places)}`;
+}
+function rankingMoveHtml(u){
+  const txt=rankingMoveText(u);
+  if(!txt) return '';
+  const up=(u.move||{}).dir==='up';
+  const title=up?`Subió ${Math.abs(u.move.places)} lugar(es) vs. el ranking anterior`:`Bajó ${Math.abs(u.move.places)} lugar(es) vs. el ranking anterior`;
+  return `<span title="${title}" style="color:${up?'#69ff6e':'#ff8a8a'};font-size:10px;margin-left:3px;font-weight:900;white-space:nowrap;">${txt}</span>`;
+}
+function drawRankingMove(ctx,u,x,y){
+  const txt=rankingMoveText(u);
+  if(!txt) return;
+  const up=(u.move||{}).dir==='up';
+  ctx.fillStyle=up?'#69ff6e':'#ff8a8a';
+  ctx.font='900 20px system-ui, -apple-system, Segoe UI, sans-serif';
+  ctx.fillText(txt,x,y);
+}
 
 function _downloadBlob(blob,filename){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();
