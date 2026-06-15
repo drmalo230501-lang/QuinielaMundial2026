@@ -1387,6 +1387,25 @@ function calcStats(preds, kopreds, opts={}){  const R=getResults();
     }
   }
  return{total,exact,winner,miss,played,correct:exact+winner};
+                                            }
+function compareRankingStats(a,b){
+  return b.total-a.total||b.correct-a.correct||b.exact-a.exact||a.miss-b.miss;
+}
+function sameRankingStats(a,b){
+  return !!a&&!!b&&a.total===b.total&&a.correct===b.correct&&a.exact===b.exact&&a.miss===b.miss;
+}
+function assignRankingPositions(ranked){
+  let lastLockedRank=0;
+  let lastLocked=null;
+  let lockedSeen=0;
+  ranked.forEach(u=>{
+    if(u.locked===false){u.rankPos=null;return;}
+    lockedSeen+=1;
+    if(!lastLocked||!sameRankingStats(u,lastLocked)) lastLockedRank=lockedSeen;
+    u.rankPos=lastLockedRank;
+    lastLocked=u;
+  });
+  return ranked;
 }
   function getRankingMovement(quinielaName, currentRank){
   const latest=getLatestPublishedResult();
@@ -1394,13 +1413,14 @@ function calcStats(preds, kopreds, opts={}){  const R=getResults();
   const excludeType=latest.type==='ko'?'ko':'group';
   const prevRank=Object.entries(q.users||{}).filter(([,u])=>u.locked)
     .map(([n,u])=>({n,...calcStats(u.preds||{},u.kopreds||{},{excludeType,excludeId:latest.match.id}),locked:true}))
-    .sort((a,b)=>b.total-a.total||b.correct-a.correct||b.exact-a.exact||a.n.localeCompare(b.n));
+   .sort(compareRankingStats);
+  assignRankingPositions(prevRank);
   const prevPos={};
-  prevRank.forEach((u,i)=>prevPos[u.n]=i);
+prevRank.forEach(u=>prevPos[u.n]=u.rankPos);
   const movement={};
   currentRank.filter(u=>u.locked!==false).forEach((u,i)=>{
     if(prevPos[u.n]===undefined) return;
-    const places=prevPos[u.n]-i;
+    const places=prevPos[u.n]-u.rankPos;
     movement[u.n]={places,dir:places>0?'up':places<0?'down':'same'};
   });
   return movement;
@@ -1411,11 +1431,12 @@ function getRanking(quinielaName){
   // Locked users with stats first, then unlocked users with 0 pts at bottom
   const lockedUsers=Object.entries(q.users||{}).filter(([,u])=>u.locked)
     .map(([n,u])=>({n,...calcStats(u.preds||{},u.kopreds||{}),locked:true}))
-    .sort((a,b)=>b.total-a.total||b.correct-a.correct||b.exact-a.exact||a.n.localeCompare(b.n)); 
+   .sort(compareRankingStats);
   const unlockedUsers=Object.entries(q.users||{}).filter(([,u])=>!u.locked)
     .map(([n,u])=>({n,total:0,exact:0,winner:0,miss:0,played:0,correct:0,locked:false,move:{places:0,dir:'same'}}))
     .sort((a,b)=>a.n.localeCompare(b.n));
   const ranked=[...lockedUsers,...unlockedUsers];
+  assignRankingPositions(ranked);
  const movement=getRankingMovement(quinielaName,ranked);
   ranked.forEach(u=>{u.move=movement[u.n]||{places:0,dir:'same'};});
   return ranked;
@@ -2465,9 +2486,9 @@ async function createRankingImageBlob(qName){
   _roundRect(ctx,60,y,W-120,130,28);ctx.fillStyle='rgba(255,215,0,0.12)';ctx.fill();ctx.strokeStyle='rgba(255,215,0,0.34)';ctx.lineWidth=2;ctx.stroke();
   ctx.textAlign='center';ctx.fillStyle='#FFD700';ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('ÚLTIMO RESULTADO PUBLICADO',W/2,y+34);
   if(latest){
-   _fitCanvasText(ctx,`${F(latest.teamH)} ${latest.teamH}`,430,y+80,340,30,'900','right','#fff');
+ _fitCanvasText(ctx,`${F(latest.teamH)} ${latest.teamH}`,390,y+80,280,30,'900','right','#fff');
     _fitCanvasText(ctx,`${latest.result.h} - ${latest.result.a}`,W/2,y+82,180,46,'900','center','#FFD700');
-    _fitCanvasText(ctx,`${F(latest.teamA)} ${latest.teamA}`,650,y+80,340,30,'900','left','#fff');
+    _fitCanvasText(ctx,`${F(latest.teamA)} ${latest.teamA}`,690,y+80,280,30,'900','left','#fff');
     _fitCanvasText(ctx,formatLatestResultMeta(latest),W/2,y+110,W-180,20,'600','center','rgba(255,255,255,0.68)');
   }else{
     ctx.fillStyle='rgba(255,255,255,0.68)';ctx.font='600 28px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('Aún no hay resultados publicados',W/2,y+82);
@@ -2486,7 +2507,7 @@ async function createRankingImageBlob(qName){
     ctx.fillStyle=i===0?'rgba(255,215,0,0.16)':i===1?'rgba(100,150,255,0.12)':i===2?'rgba(180,100,50,0.12)':'rgba(255,255,255,0.045)';
     _roundRect(ctx,60,y,W-120,rowH-8,16);ctx.fill();
     ctx.fillStyle=locked?'#fff':'rgba(255,255,255,0.52)';ctx.font='800 24px system-ui, -apple-system, Segoe UI, sans-serif';
-    ctx.fillText(locked?(medals[i]||String(i+1)):'—',cols.pos,y+32);
+    ctx.fillText(locked?(u.rankPos<=3&&medals[u.rankPos-1]?medals[u.rankPos-1]:String(u.rankPos)):'—',cols.pos,y+32);
      if(locked) drawRankingMove(ctx,u,126,y+32);
     ctx.fillStyle=i===0?'#FFD700':'#fff';ctx.fillText(u.n,cols.name,y+32);
     ctx.fillStyle='#FFD700';ctx.font='900 28px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText(locked?String(u.total):'—',cols.pts,y+34);
@@ -2497,7 +2518,7 @@ async function createRankingImageBlob(qName){
     y+=rowH;
   });
   if(rank.length>maxRows){ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.58)';ctx.font='600 22px system-ui';ctx.fillText(`+ ${rank.length-maxRows} participantes más`,W/2,y+26);}
-  ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · Desempate: correctos, luego exactos`,W/2,H-24);
+ ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · Desempate: correctos, exactos y fallados; empates comparten lugar`,W/2,H-24);
   return await new Promise(resolve=>canvas.toBlob(resolve,'image/png',0.95));
 }
 
@@ -2597,9 +2618,9 @@ async function createRankingImageBlob(qName){
   _roundRect(ctx,60,y,W-120,130,28);ctx.fillStyle='rgba(255,215,0,0.12)';ctx.fill();ctx.strokeStyle='rgba(255,215,0,0.34)';ctx.lineWidth=2;ctx.stroke();
   ctx.textAlign='center';ctx.fillStyle='#FFD700';ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('ÚLTIMO RESULTADO PUBLICADO',W/2,y+34);
   if(latest){
- _fitCanvasText(ctx,`${F(latest.teamH)} ${latest.teamH}`,430,y+80,340,30,'900','right','#fff');
+  _fitCanvasText(ctx,`${F(latest.teamH)} ${latest.teamH}`,390,y+80,280,30,'900','right','#fff');
     _fitCanvasText(ctx,`${latest.result.h} - ${latest.result.a}`,W/2,y+82,180,46,'900','center','#FFD700');
-    _fitCanvasText(ctx,`${F(latest.teamA)} ${latest.teamA}`,650,y+80,340,30,'900','left','#fff');
+   _fitCanvasText(ctx,`${F(latest.teamA)} ${latest.teamA}`,690,y+80,280,30,'900','left','#fff');
     _fitCanvasText(ctx,formatLatestResultMeta(latest),W/2,y+110,W-180,20,'600','center','rgba(255,255,255,0.68)');
   }else{
     ctx.fillStyle='rgba(255,255,255,0.68)';ctx.font='600 28px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('Aún no hay resultados publicados',W/2,y+82);
@@ -2618,7 +2639,7 @@ async function createRankingImageBlob(qName){
     ctx.fillStyle=i===0?'rgba(255,215,0,0.16)':i===1?'rgba(100,150,255,0.12)':i===2?'rgba(180,100,50,0.12)':'rgba(255,255,255,0.045)';
     _roundRect(ctx,60,y,W-120,rowH-8,16);ctx.fill();
     ctx.fillStyle=locked?'#fff':'rgba(255,255,255,0.52)';ctx.font='800 24px system-ui, -apple-system, Segoe UI, sans-serif';
-    ctx.fillText(locked?(medals[i]||String(i+1)):'—',cols.pos,y+32);
+   ctx.fillText(locked?(u.rankPos<=3&&medals[u.rankPos-1]?medals[u.rankPos-1]:String(u.rankPos)):'—',cols.pos,y+32);
      if(locked) drawRankingMove(ctx,u,126,y+32);
     ctx.fillStyle=i===0?'#FFD700':'#fff';ctx.fillText(u.n,cols.name,y+32);
     ctx.fillStyle='#FFD700';ctx.font='900 28px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText(locked?String(u.total):'—',cols.pts,y+34);
@@ -2629,8 +2650,7 @@ async function createRankingImageBlob(qName){
     y+=rowH;
   });
   if(rank.length>maxRows){ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.58)';ctx.font='600 22px system-ui';ctx.fillText(`+ ${rank.length-maxRows} participantes más`,W/2,y+26);}
-  ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · Desempate: correctos, luego exactos`,W/2,H-24);
-  return await new Promise(resolve=>canvas.toBlob(resolve,'image/png',0.95));
+ ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · Desempate: correctos, exactos y fallados; empates comparten lugar`,W/2,H-24);
 }
 
 window.SHARE_RANKING=async qName=>{
@@ -2690,13 +2710,13 @@ function buildRanking(){
       :rank.map((u,i)=>{
         const isLocked=u.locked!==false;
         const rowCls=isLocked?(i===0?'top1':i===1?'top2':i===2?'top3':''):'';
-        const pos=isLocked?i+1:'—';
-        const medal=isLocked&&i<3?medals[i]:null;
+        const pos=isLocked?u.rankPos:'—';
+        const medal=isLocked&&u.rankPos<=3?medals[u.rankPos-1]:null;
         return `<tr class="${rowCls}" style="${!isLocked?'opacity:0.6;':''}">
         <td style="font-size:14px;">${medal||pos}</td>
         <td>
           <strong style="cursor:pointer;text-decoration:underline dotted;color:var(--gold);"
-            onclick="VIEW_PROFILE('${u.n}','${qName}')">${u.n}</strong>${i===0&&rank.filter(x=>x.locked!==false).length>1?' 👑':''}
+           onclick="VIEW_PROFILE('${u.n}','${qName}')">${u.n}</strong>${isLocked&&u.rankPos===1&&rank.filter(x=>x.locked!==false).length>1?' 👑':''}
  ${isLocked?rankingMoveHtml(u):'<span style="font-size:9px;color:var(--muted);margin-left:3px;">✏️ en progreso</span>'}        </td>
         <td class="pts-big">${isLocked?u.total:'—'}</td>
         <td><span class="bs bs-g">${isLocked?u.exact:'—'}</span></td>
@@ -2755,8 +2775,8 @@ function buildPublicRankingCard(qName){
           rank.map((u,i)=>{
             const isLocked=u.locked!==false;
             const rowCls=isLocked?(i===0?'top1':i===1?'top2':i===2?'top3':''):'';
-            const pos=isLocked?i+1:'—';
-            const medal=isLocked&&i<3?medals[i]:null;
+            const pos=isLocked?u.rankPos:'—';
+            const medal=isLocked&&u.rankPos<=3?medals[u.rankPos-1]:null;
             return `<tr class="${rowCls}" style="${!isLocked?'opacity:0.6;':''}">
               <td style="font-size:14px;">${medal||pos}</td>
 <td><strong style="cursor:pointer;text-decoration:underline dotted;color:var(--gold);" onclick="VIEW_PROFILE('${u.n}','${qName}')">${u.n}</strong>${isLocked?rankingMoveHtml(u):'<span style="font-size:9px;color:var(--muted);margin-left:3px;">✏️</span>'}</td>              <td class="pts-big">${isLocked?u.total:'—'}</td>
@@ -2846,7 +2866,7 @@ function buildRankingAll(){
       </div>
       ${rank.slice(0,5).map((u,i)=>`
         <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
-          <span style="font-size:14px;min-width:20px;">${i<3?medals[i]:(i+1)}</span>
+          <span style="font-size:14px;min-width:20px;">${u.rankPos<=3&&medals[u.rankPos-1]?medals[u.rankPos-1]:u.rankPos}</span>
           <span style="flex:1;font-size:12px;">${u.n}</span>
           <span style="font-size:14px;font-weight:800;color:var(--gold);">${u.total} pts</span>
         </div>`).join('')}
@@ -3975,7 +3995,8 @@ window.SHARE_CARD=function(playerName, qName){
   const u=q.users[playerName]; if(!u) return;
   const stats=calcStats(u.preds||{},u.kopreds||{});
   const rank=getRanking(qName);
-  const pos=rank.findIndex(r=>r.n===playerName)+1;
+ const foundRank=rank.find(r=>r.n===playerName);
+  const pos=foundRank&&foundRank.rankPos?foundRank.rankPos:rank.findIndex(r=>r.n===playerName)+1;
   const champ=getUserChampion(u);
   const badges=getAchievements(u.preds||{},u.kopreds||{});
   const canvas=document.createElement('canvas');
@@ -4027,7 +4048,8 @@ window.EXPORT_MY_PDF=async function(playerName, qName){
   const kopreds=u.kopreds||{};
   const stats=calcStats(preds,kopreds);
   const rank=getRanking(qName);
-  const pos=rank.findIndex(r=>r.n===playerName)+1;
+  const foundRank=rank.find(r=>r.n===playerName);
+  const pos=foundRank&&foundRank.rankPos?foundRank.rankPos:rank.findIndex(r=>r.n===playerName)+1;
   const champ=getUserChampion(u)||'\u2014';
   const rows=ALL.map(m=>{
     const p=preds[m.id];const r=realRes[m.id];
@@ -4204,7 +4226,7 @@ window.EXPORT_EXCEL = function(qName) {
   ranking.forEach((r, i) => {
     const u = q.users[r.n] || {};
     rankData.push([
-      i + 1, r.n, r.total, r.exact, r.correct, r.winner, r.miss, r.played,
+      r.rankPos || i + 1, r.n, r.total, r.exact, r.correct, r.winner, r.miss, r.played,
       u.locked ? 'Sí' : 'No',
       u.kolocked ? 'Sí' : 'No'
     ]);
