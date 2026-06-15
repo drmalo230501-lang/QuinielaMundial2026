@@ -1338,13 +1338,13 @@ function getAchievements(preds, kopreds){
   return badges;
 }
 
-function calcStats(preds, kopreds){
-  const R=getResults();
+function calcStats(preds, kopreds, opts={}){  const R=getResults();
   const realRes=R.results||{};
   const realKO=R.koresults||{};
   let total=0,exact=0,winner=0,miss=0,played=0;
   // Groups
   for(const m of ALL){
+     if(opts.excludeType==='group'&&opts.excludeId===m.id) continue;
     const res=matchResult(preds[m.id],realRes[m.id]);
     if(res==='pending') continue;
     played++;
@@ -1356,6 +1356,7 @@ function calcStats(preds, kopreds){
   if(kopreds){
     const realPreds=realRes; // group results already in realRes
     for(const m of KO_MATCHES){
+       if(opts.excludeType==='ko'&&opts.excludeId===m.id) continue;
       const real=realKO[m.id];
       if(!real||real.h===''||real.h===undefined) continue; // not played yet
       const pred=kopreds[m.id];
@@ -1386,26 +1387,36 @@ function calcStats(preds, kopreds){
   }
   return{total,exact,winner,miss,played};
 }
+  function getRankingMovement(quinielaName, currentRank){
+  const latest=getLatestPublishedResult();
+  const q=getQ(quinielaName); if(!q||!latest) return {};
+  const excludeType=latest.type==='ko'?'ko':'group';
+  const prevRank=Object.entries(q.users||{}).filter(([,u])=>u.locked)
+    .map(([n,u])=>({n,...calcStats(u.preds||{},u.kopreds||{},{excludeType,excludeId:latest.match.id}),locked:true}))
+    .sort((a,b)=>b.total-a.total||b.exact-a.exact||a.n.localeCompare(b.n));
+  const prevPos={};
+  prevRank.forEach((u,i)=>prevPos[u.n]=i);
+  const movement={};
+  currentRank.filter(u=>u.locked!==false).forEach((u,i)=>{
+    if(prevPos[u.n]===undefined) return;
+    const places=prevPos[u.n]-i;
+    movement[u.n]={places,dir:places>0?'up':places<0?'down':'same'};
+  });
+  return movement;
+}
+
 function getRanking(quinielaName){
   const q=getQ(quinielaName); if(!q) return [];
   // Locked users with stats first, then unlocked users with 0 pts at bottom
   const lockedUsers=Object.entries(q.users||{}).filter(([,u])=>u.locked)
     .map(([n,u])=>({n,...calcStats(u.preds||{},u.kopreds||{}),locked:true}))
-    .sort((a,b)=>b.total-a.total||b.exact-a.exact);
+    .sort((a,b)=>b.total-a.total||b.exact-a.exact||a.n.localeCompare(b.n));
   const unlockedUsers=Object.entries(q.users||{}).filter(([,u])=>!u.locked)
-    .map(([n,u])=>({n,total:0,exact:0,winner:0,miss:0,played:0,locked:false,arrow:'new'}))
+     .map(([n,u])=>({n,total:0,exact:0,winner:0,miss:0,played:0,locked:false,move:{places:0,dir:'same'}}))
     .sort((a,b)=>a.n.localeCompare(b.n));
   const ranked=[...lockedUsers,...unlockedUsers];
-  // Position arrows only for locked users
-  if(!window._prevRank) window._prevRank={};
-  const prev=window._prevRank[quinielaName]||{};
-  lockedUsers.forEach((u,i)=>{
-    const prevPos=prev[u.n];
-    u.arrow=prevPos===undefined?'new':prevPos>i?'up':prevPos<i?'down':'same';
-  });
-  const snap={};
-  lockedUsers.forEach((u,i)=>snap[u.n]=i);
-  window._prevRank[quinielaName]=snap;
+ const movement=getRankingMovement(quinielaName,ranked);
+  ranked.forEach(u=>{u.move=movement[u.n]||{places:0,dir:'same'};});
   return ranked;
 }
 
@@ -2381,6 +2392,28 @@ function _fitCanvasText(ctx,text,x,y,maxWidth,fontSize,fontWeight='800',align='c
   }
   ctx.fillText(value,x,y);
 }
+  
+  function rankingMoveText(u){
+  const m=u&&u.move;
+  if(!m||!m.places) return '';
+  return `${m.dir==='up'?'▲':'▼'}${Math.abs(m.places)}`;
+}
+function rankingMoveHtml(u){
+  const txt=rankingMoveText(u);
+  if(!txt) return '';
+  const up=(u.move||{}).dir==='up';
+  const title=up?`Subió ${Math.abs(u.move.places)} lugar(es) vs. el ranking anterior`:`Bajó ${Math.abs(u.move.places)} lugar(es) vs. el ranking anterior`;
+  return `<span title="${title}" style="color:${up?'#69ff6e':'#ff8a8a'};font-size:10px;margin-left:3px;font-weight:900;white-space:nowrap;">${txt}</span>`;
+}
+function drawRankingMove(ctx,u,x,y){
+  const txt=rankingMoveText(u);
+  if(!txt) return;
+  const up=(u.move||{}).dir==='up';
+  ctx.fillStyle=up?'#69ff6e':'#ff8a8a';
+  ctx.font='900 20px system-ui, -apple-system, Segoe UI, sans-serif';
+  ctx.fillText(txt,x,y);
+}
+
 function _downloadBlob(blob,filename){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1200);
@@ -2422,6 +2455,7 @@ async function createRankingImageBlob(qName){
     _roundRect(ctx,60,y,W-120,rowH-8,16);ctx.fill();
     ctx.fillStyle=locked?'#fff':'rgba(255,255,255,0.52)';ctx.font='800 24px system-ui, -apple-system, Segoe UI, sans-serif';
     ctx.fillText(locked?(medals[i]||String(i+1)):'—',cols.pos,y+32);
+     if(locked) drawRankingMove(ctx,u,126,y+32);
     ctx.fillStyle=i===0?'#FFD700':'#fff';ctx.fillText(u.n,cols.name,y+32);
     ctx.fillStyle='#FFD700';ctx.font='900 28px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText(locked?String(u.total):'—',cols.pts,y+34);
     ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillStyle='#69ff6e';ctx.fillText(locked?String(u.exact):'—',cols.exact,y+32);
@@ -2531,8 +2565,10 @@ async function createRankingImageBlob(qName){
   _roundRect(ctx,60,y,W-120,130,28);ctx.fillStyle='rgba(255,215,0,0.12)';ctx.fill();ctx.strokeStyle='rgba(255,215,0,0.34)';ctx.lineWidth=2;ctx.stroke();
   ctx.textAlign='center';ctx.fillStyle='#FFD700';ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('ÚLTIMO RESULTADO PUBLICADO',W/2,y+34);
   if(latest){
-    ctx.fillStyle='#fff';ctx.font='900 40px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText(`${F(latest.teamH)} ${latest.teamH}   ${latest.result.h} - ${latest.result.a}   ${F(latest.teamA)} ${latest.teamA}`,W/2,y+78);
-    ctx.fillStyle='rgba(255,255,255,0.68)';ctx.font='600 20px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText(formatLatestResultMeta(latest),W/2,y+110);
+ _fitCanvasText(ctx,`${F(latest.teamH)} ${latest.teamH}`,250,y+80,330,34,'900','center','#fff');
+    _fitCanvasText(ctx,`${latest.result.h} - ${latest.result.a}`,W/2,y+82,190,46,'900','center','#FFD700');
+    _fitCanvasText(ctx,`${F(latest.teamA)} ${latest.teamA}`,830,y+80,330,34,'900','center','#fff');
+    _fitCanvasText(ctx,formatLatestResultMeta(latest),W/2,y+110,W-180,20,'600','center','rgba(255,255,255,0.68)');
   }else{
     ctx.fillStyle='rgba(255,255,255,0.68)';ctx.font='600 28px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText('Aún no hay resultados publicados',W/2,y+82);
   }
@@ -2551,6 +2587,7 @@ async function createRankingImageBlob(qName){
     _roundRect(ctx,60,y,W-120,rowH-8,16);ctx.fill();
     ctx.fillStyle=locked?'#fff':'rgba(255,255,255,0.52)';ctx.font='800 24px system-ui, -apple-system, Segoe UI, sans-serif';
     ctx.fillText(locked?(medals[i]||String(i+1)):'—',cols.pos,y+32);
+     if(locked) drawRankingMove(ctx,u,126,y+32);
     ctx.fillStyle=i===0?'#FFD700':'#fff';ctx.fillText(u.n,cols.name,y+32);
     ctx.fillStyle='#FFD700';ctx.font='900 28px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText(locked?String(u.total):'—',cols.pts,y+34);
     ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillStyle='#69ff6e';ctx.fillText(locked?String(u.exact):'—',cols.exact,y+32);
@@ -2628,8 +2665,7 @@ function buildRanking(){
         <td>
           <strong style="cursor:pointer;text-decoration:underline dotted;color:var(--gold);"
             onclick="VIEW_PROFILE('${u.n}','${qName}')">${u.n}</strong>${i===0&&rank.filter(x=>x.locked!==false).length>1?' 👑':''}
-          ${isLocked?(u.arrow==='up'?'<span style="color:#69ff6e;font-size:10px;margin-left:3px;">▲</span>':u.arrow==='down'?'<span style="color:#ff8a8a;font-size:10px;margin-left:3px;">▼</span>':''):'<span style="font-size:9px;color:var(--muted);margin-left:3px;">✏️ en progreso</span>'}
-        </td>
+ ${isLocked?rankingMoveHtml(u):'<span style="font-size:9px;color:var(--muted);margin-left:3px;">✏️ en progreso</span>'}        </td>
         <td class="pts-big">${isLocked?u.total:'—'}</td>
         <td><span class="bs bs-g">${isLocked?u.exact:'—'}</span></td>
         <td><span class="bs bs-y">${isLocked?u.winner:'—'}</span></td>
@@ -2691,8 +2727,7 @@ function buildPublicRankingCard(qName){
             const medal=isLocked&&i<3?medals[i]:null;
             return `<tr class="${rowCls}" style="${!isLocked?'opacity:0.6;':''}">
               <td style="font-size:14px;">${medal||pos}</td>
-              <td><strong style="cursor:pointer;text-decoration:underline dotted;color:var(--gold);" onclick="VIEW_PROFILE('${u.n}','${qName}')">${u.n}</strong>${!isLocked?'<span style="font-size:9px;color:var(--muted);margin-left:3px;">✏️</span>':''}</td>
-              <td class="pts-big">${isLocked?u.total:'—'}</td>
+<td><strong style="cursor:pointer;text-decoration:underline dotted;color:var(--gold);" onclick="VIEW_PROFILE('${u.n}','${qName}')">${u.n}</strong>${isLocked?rankingMoveHtml(u):'<span style="font-size:9px;color:var(--muted);margin-left:3px;">✏️</span>'}</td>              <td class="pts-big">${isLocked?u.total:'—'}</td>
               <td><span class="bs bs-g">${isLocked?u.exact:'—'}</span></td>
               <td><span class="bs bs-y">${isLocked?u.winner:'—'}</span></td>
               <td><span class="bs bs-r">${isLocked?u.miss:'—'}</span></td>
