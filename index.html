@@ -2512,7 +2512,7 @@ function _downloadBlob(blob,filename){
 }
 
 async function createRankingImageBlob(qName){
-  const q=getQ(qName);const rank=getRanking(qName);const latest=getLatestPublishedResult();
+  const q=getQ(qName);const rank=getRanking(qName);const latest=getLatestPublishedResult();const currentMatch=getCurrentMatchItem();
   const rowH=54,maxRows=Math.min(rank.length,12),W=1080,H=450+(maxRows*rowH)+(rank.length>maxRows?46:0);
   const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;
   const ctx=canvas.getContext('2d');
@@ -2533,10 +2533,10 @@ async function createRankingImageBlob(qName){
 
   y=334;
   ctx.textAlign='left';
-  const cols={pos:90,name:170,pts:650,exact:760,winner:860,miss:950};
+  const cols={pos:90,name:165,pts:560,exact:650,winner:730,miss:810,current:890,diff:1000};
   ctx.fillStyle='#0a0a25';_roundRect(ctx,60,y,W-120,48,18);ctx.fill();
   ctx.fillStyle='#FFD700';ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';
-  ctx.fillText('#',cols.pos,y+31);ctx.fillText('Jugador',cols.name,y+31);ctx.fillText('Pts',cols.pts,y+31);ctx.fillText('✅',cols.exact,y+31);ctx.fillText('✔',cols.winner,y+31);ctx.fillText('❌',cols.miss,y+31);
+  ctx.fillText('#',cols.pos,y+31);ctx.fillText('Jugador',cols.name,y+31);ctx.fillText('Pts',cols.pts,y+31);ctx.fillText('✅',cols.exact,y+31);ctx.fillText('✔',cols.winner,y+31);ctx.fillText('❌',cols.miss,y+31);ctx.fillText('En curso',cols.current,y+31);ctx.fillText('Δ1°',cols.diff,y+31);
   y+=58;
   const topPts=rank.length?rank[0].total:0,medals=['🥇','🥈','🥉'];
   rank.slice(0,maxRows).forEach((u,i)=>{
@@ -2546,16 +2546,18 @@ async function createRankingImageBlob(qName){
     ctx.fillStyle=locked?'#fff':'rgba(255,255,255,0.52)';ctx.font='800 24px system-ui, -apple-system, Segoe UI, sans-serif';
     ctx.fillText(locked?(u.rankPos<=3&&medals[u.rankPos-1]?medals[u.rankPos-1]:String(u.rankPos)):'—',cols.pos,y+32);
      if(locked) drawRankingMove(ctx,u,126,y+32);
-    ctx.fillStyle=i===0?'#FFD700':'#fff';ctx.fillText(u.n,cols.name,y+32);
+     ctx.fillStyle=i===0?'#FFD700':'#fff';_fitCanvasText(ctx,u.n,cols.name,y+32,360,24,'800','left',i===0?'#FFD700':'#fff');
     ctx.fillStyle='#FFD700';ctx.font='900 28px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText(locked?String(u.total):'—',cols.pts,y+34);
     ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillStyle='#69ff6e';ctx.fillText(locked?String(u.exact):'—',cols.exact,y+32);
     ctx.fillStyle='rgba(255,255,255,0.78)';ctx.fillText(locked?String(u.correct):'—',cols.winner,y+32);
     ctx.fillStyle='#ff8a8a';ctx.fillText(locked?String(u.miss):'—',cols.miss,y+32);
-    if(locked&&i>0){ctx.fillStyle='rgba(255,255,255,0.45)';ctx.font='600 18px system-ui';ctx.fillText(`-${topPts-u.total}`,1000,y+31);}
+    const currentPick=locked?getUserPickForCurrent((q||{}).users?.[u.n],currentMatch):null;
+    ctx.fillStyle=currentPick?'#69ff6e':'rgba(255,255,255,0.45)';ctx.font='900 22px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText(currentPick||'—',cols.current,y+32);
+    if(locked&&i>0){ctx.fillStyle='rgba(255,255,255,0.45)';ctx.font='600 18px system-ui';ctx.fillText(`-${topPts-u.total}`,cols.diff,y+31);}
     y+=rowH;
   });
   if(rank.length>maxRows){ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.58)';ctx.font='600 22px system-ui';ctx.fillText(`+ ${rank.length-maxRows} participantes más`,W/2,y+26);}
- ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · Desempate: correctos, exactos y fallados; empates comparten lugar`,W/2,H-24);
+ ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · En curso = pick del partido vigente · Desempate: correctos, exactos y fallados`,W/2,H-24);
   return await new Promise(resolve=>canvas.toBlob(resolve,'image/png',0.95));
 }
 
@@ -2703,7 +2705,7 @@ function _downloadBlob(blob,filename){
 }
 
 async function createRankingImageBlob(qName){
-  const q=getQ(qName);const rank=getRanking(qName);const latest=getLatestPublishedResult();
+  const q=getQ(qName);const rank=getRanking(qName);const latest=getLatestPublishedResult();const currentMatch=getCurrentMatchItem();
   const rowH=54,maxRows=Math.min(rank.length,12),W=1080,H=450+(maxRows*rowH)+(rank.length>maxRows?46:0);
   const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;
   const ctx=canvas.getContext('2d');
@@ -2724,10 +2726,10 @@ async function createRankingImageBlob(qName){
 
   y=334;
   ctx.textAlign='left';
-  const cols={pos:90,name:170,pts:650,exact:760,winner:860,miss:950};
+  const cols={pos:90,name:165,pts:560,exact:650,winner:730,miss:810,current:890,diff:1000};
   ctx.fillStyle='#0a0a25';_roundRect(ctx,60,y,W-120,48,18);ctx.fill();
   ctx.fillStyle='#FFD700';ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';
-  ctx.fillText('#',cols.pos,y+31);ctx.fillText('Jugador',cols.name,y+31);ctx.fillText('Pts',cols.pts,y+31);ctx.fillText('✅',cols.exact,y+31);ctx.fillText('✔',cols.winner,y+31);ctx.fillText('❌',cols.miss,y+31);
+  ctx.fillText('#',cols.pos,y+31);ctx.fillText('Jugador',cols.name,y+31);ctx.fillText('Pts',cols.pts,y+31);ctx.fillText('✅',cols.exact,y+31);ctx.fillText('✔',cols.winner,y+31);ctx.fillText('❌',cols.miss,y+31);ctx.fillText('En curso',cols.current,y+31);ctx.fillText('Δ1°',cols.diff,y+31);
   y+=58;
   const topPts=rank.length?rank[0].total:0,medals=['🥇','🥈','🥉'];
   rank.slice(0,maxRows).forEach((u,i)=>{
@@ -2737,16 +2739,18 @@ async function createRankingImageBlob(qName){
     ctx.fillStyle=locked?'#fff':'rgba(255,255,255,0.52)';ctx.font='800 24px system-ui, -apple-system, Segoe UI, sans-serif';
    ctx.fillText(locked?(u.rankPos<=3&&medals[u.rankPos-1]?medals[u.rankPos-1]:String(u.rankPos)):'—',cols.pos,y+32);
      if(locked) drawRankingMove(ctx,u,126,y+32);
-    ctx.fillStyle=i===0?'#FFD700':'#fff';ctx.fillText(u.n,cols.name,y+32);
+   ctx.fillStyle=i===0?'#FFD700':'#fff';_fitCanvasText(ctx,u.n,cols.name,y+32,360,24,'800','left',i===0?'#FFD700':'#fff');
     ctx.fillStyle='#FFD700';ctx.font='900 28px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText(locked?String(u.total):'—',cols.pts,y+34);
     ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillStyle='#69ff6e';ctx.fillText(locked?String(u.exact):'—',cols.exact,y+32);
     ctx.fillStyle='rgba(255,255,255,0.78)';ctx.fillText(locked?String(u.correct):'—',cols.winner,y+32);
     ctx.fillStyle='#ff8a8a';ctx.fillText(locked?String(u.miss):'—',cols.miss,y+32);
-    if(locked&&i>0){ctx.fillStyle='rgba(255,255,255,0.45)';ctx.font='600 18px system-ui';ctx.fillText(`-${topPts-u.total}`,1000,y+31);}
+    const currentPick=locked?getUserPickForCurrent((q||{}).users?.[u.n],currentMatch):null;
+    ctx.fillStyle=currentPick?'#69ff6e':'rgba(255,255,255,0.45)';ctx.font='900 22px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText(currentPick||'—',cols.current,y+32);
+    if(locked&&i>0){ctx.fillStyle='rgba(255,255,255,0.45)';ctx.font='600 18px system-ui';ctx.fillText(`-${topPts-u.total}`,cols.diff,y+31);}
     y+=rowH;
   });
   if(rank.length>maxRows){ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.58)';ctx.font='600 22px system-ui';ctx.fillText(`+ ${rank.length-maxRows} participantes más`,W/2,y+26);}
- ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · Desempate: correctos, exactos y fallados; empates comparten lugar`,W/2,H-24);
+  ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · En curso = pick del partido vigente · Desempate: correctos, exactos y fallados`,W/2,H-24);
   return await new Promise(resolve=>canvas.toBlob(resolve,'image/png',0.95));
 }
 
