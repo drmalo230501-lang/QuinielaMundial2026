@@ -184,8 +184,19 @@ body.light-mode .alert-w{background:rgba(255,193,7,0.15);color:#6d4c00;}
 .home-ranking-title{display:flex;align-items:center;gap:8px;margin:12px 0 8px;font-size:14px;font-weight:900;color:var(--gold);}
 .home-ranking-title::after{content:'';flex:1;height:1px;background:rgba(255,215,0,0.25);}
 .home-ranking-note{font-size:10px;color:var(--muted);line-height:1.4;margin:-2px 0 10px;}
-  
-/* PRIZE BANNER */
+
+
+  .current-match-card{margin:0 10px 10px;padding:12px;border:1px solid rgba(0,200,83,0.35);border-radius:14px;background:linear-gradient(135deg,rgba(0,200,83,0.12),rgba(26,110,245,0.08));}
+.current-match-label{font-size:10px;font-weight:800;color:#69ff6e;letter-spacing:.4px;text-transform:uppercase;margin-bottom:7px;}
+.current-match-main{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;}
+.current-match-team{text-align:center;font-size:11px;line-height:1.2;}
+.current-match-flag{display:block;font-size:24px;margin-bottom:2px;}
+.current-match-score{font-size:24px;font-weight:900;color:#fff;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.current-match-meta{margin-top:7px;text-align:center;font-size:10px;color:var(--muted);line-height:1.35;}
+.current-pick{display:inline-block;min-width:42px;padding:3px 6px;border-radius:7px;background:rgba(0,200,83,0.13);border:1px solid rgba(0,200,83,0.32);color:#69ff6e;font-weight:800;font-variant-numeric:tabular-nums;}
+.current-pick.missing{background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.14);color:var(--muted);font-weight:700;}
+
+  /* PRIZE BANNER */
 .prize-banner{background:linear-gradient(135deg,#1a1500,#2d2200);border:2px solid var(--gold);border-radius:16px;padding:16px;text-align:center;margin:0 10px 12px;}
 .prize-amount{font-size:38px;font-weight:800;color:var(--gold);line-height:1;}
 .prize-sub{font-size:11px;color:var(--muted);margin-top:4px;}
@@ -2589,6 +2600,67 @@ window.SHARE_RANKING=async qName=>{
   return items[0];
 }
 
+
+  var MONTH_INDEX={ene:0,feb:1,mar:2,abr:3,may:4,jun:5,jul:6,ago:7,sep:8,oct:9,nov:10,dic:11};
+function getMatchStart(m){
+  if(!m||!m.d||!m.t) return null;
+  const parts=String(m.d).trim().split(/\s+/);
+  if(parts.length<3) return null;
+  const day=parseInt(parts[1],10);
+  const monKey=parts[2].slice(0,3).toLowerCase();
+  const month=MONTH_INDEX[monKey];
+  const [hh,mm]=String(m.t).split(':').map(x=>parseInt(x,10));
+  if(!day||month===undefined||Number.isNaN(hh)) return null;
+  return new Date(2026,month,day,hh,Number.isNaN(mm)?0:mm,0,0);
+}
+function getCurrentMatchItem(now=new Date()){
+  const items=[...ALL.map((m,idx)=>({type:'group',match:m,teamH:m.h,teamA:m.a,order:idx,start:getMatchStart(m)})),
+    ...KO_MATCHES.map((m,idx)=>{
+      const R=getResults();
+      const teamH=resolveKOTeam(m.hPos,R.results||{},R.koresults||{});
+      const teamA=resolveKOTeam(m.aPos,R.results||{},R.koresults||{});
+      return {type:'ko',match:m,teamH:teamH==='?'?'Por definir':teamH,teamA:teamA==='?'?'Por definir':teamA,order:1000+idx,start:getMatchStart(m)};
+    })
+  ].filter(x=>x.start).sort((a,b)=>a.start-b.start||a.order-b.order);
+  let current=null;
+  for(let i=0;i<items.length;i++){
+    if(items[i].start<=now) current=items[i]; else break;
+  }
+  if(!current) return null;
+  const next=items.find(x=>x.start>current.start);
+  if(next&&now>=next.start) return null;
+  return current;
+}
+function getResultForItem(item){
+  const R=getResults();
+  return item&&item.type==='ko'?(R.koresults||{})[item.match.id]:(R.results||{})[item.match.id];
+}
+function getUserPickForCurrent(u,item){
+  if(!u||!item) return null;
+  const p=item.type==='ko'?(u.kopreds||{})[item.match.id]:(u.preds||{})[item.match.id];
+  if(!p||p.h===''||p.h===undefined||p.a===''||p.a===undefined) return null;
+  return `${parseInt(p.h,10)}-${parseInt(p.a,10)}`;
+}
+function buildCurrentMatchCard(){
+  const item=getCurrentMatchItem();
+  if(!item){
+    return `<div class="current-match-card"><div class="current-match-label">Partido en curso</div><div style="text-align:center;color:var(--muted);font-size:12px;padding:8px 0;">⏳ No hay partido activo según el calendario.</div><div class="current-match-meta">La fila/columna de pronósticos aparece desde que inicia un partido y se conserva hasta que empieza el siguiente.</div></div>`;
+  }
+  const r=getResultForItem(item);
+  const score=(r&&r.h!==''&&r.h!==undefined&&r.a!==''&&r.a!==undefined)?`${parseInt(r.h,10)} - ${parseInt(r.a,10)}`:'vs';
+  const phase=item.type==='ko'?(ROUND_LABELS[item.match.round]||item.match.round):`Grupo ${item.match.g}`;
+  const start=item.start.toLocaleString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  return `<div class="current-match-card" id="current-match-ranking">
+    <div class="current-match-label">🔴 Partido en curso / vigente</div>
+    <div class="current-match-main">
+      <div class="current-match-team"><span class="current-match-flag">${F(item.teamH)}</span><strong>${item.teamH}</strong></div>
+      <div class="current-match-score">${score}</div>
+      <div class="current-match-team"><span class="current-match-flag">${F(item.teamA)}</span><strong>${item.teamA}</strong></div>
+    </div>
+    <div class="current-match-meta">${phase}${item.match.label?` · ${item.match.label}`:''} · inició ${start} · ${item.match.v||''}<br>Los resultados en vivo requieren una fuente oficial/API externa; Google no ofrece un endpoint público confiable para leer marcadores directamente desde el navegador.</div>
+  </div>`;
+}
+  
 function formatLatestResultMeta(item){
   if(!item) return 'Sin resultados publicados todavía';
   const m=item.match;
@@ -2714,6 +2786,7 @@ function buildRanking(){
       <div class="prize-amount">$${total.toLocaleString()}</div>
       <div class="prize-sub">${rank.length} participantes × $${q&&q.prize?q.prize:0} = $${total.toLocaleString()}</div>
     </div>
+     ${buildCurrentMatchCard()}
      ${buildLatestResultCard()}
     <div class="ranking-actions">
       <button class="btn btn-primary" onclick="SHARE_RANKING(decodeURIComponent('${encodeURIComponent(qName)}'))">📤 Compartir ranking</button>
@@ -2728,10 +2801,11 @@ function buildRanking(){
         <th>✔</th>
         <th>❌</th>
         <th>vs 1°</th>
+         <th>En curso</th>
         <th>🏆 Campeón</th>
       </tr></thead>
       <tbody>
-      ${rank.length===0?`<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px;">Sin participantes guardados</td></tr>`
+      ${rank.length===0?`<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:20px;">Sin participantes guardados</td></tr>`
       :rank.map((u,i)=>{
         const isLocked=u.locked!==false;
         const rowCls=isLocked?(i===0?'top1':i===1?'top2':i===2?'top3':''):'';
@@ -2748,6 +2822,7 @@ function buildRanking(){
        <td><span class="bs bs-ok">${isLocked?u.correct:'—'}</span></td>
         <td><span class="bs bs-r">${isLocked?u.miss:'—'}</span></td>
          <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>
+       <td>${(()=>{ const p=getUserPickForCurrent((getQ(qName)||{}).users?.[u.n],getCurrentMatchItem()); return p?`<span class="current-pick">${p}</span>`:`<span class="current-pick missing">—</span>`; })()}</td>
         <td style="font-size:11px;">${(()=>{
           if(u.locked===false) return '<span style="color:var(--muted)">—</span>';
           const q2=getQ(qName);
