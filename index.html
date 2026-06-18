@@ -2861,6 +2861,7 @@ function buildPublicRankingCard(qName){
       <span>🏆 ${qName}</span>
       <span style="font-size:11px;color:var(--muted);white-space:nowrap;">$${total.toLocaleString()}</span>
     </div>
+    ${buildCurrentMatchCard()}
     ${buildLatestResultCard()}
     <div class="ranking-actions" style="padding:0 0 10px;">
       <button class="btn btn-primary btn-sm" onclick="SHARE_RANKING(decodeURIComponent('${encodeURIComponent(qName)}'))">📤 Compartir imagen</button>
@@ -2868,10 +2869,10 @@ function buildPublicRankingCard(qName){
     <div style="overflow-x:auto;">
       <table class="rank-table">
         <thead><tr>
-          <th>#</th><th style="text-align:left;">Jugador</th><th>Pts</th><th>✅</th><th>✔</th><th>❌</th><th>vs 1°</th>
+         <th>#</th><th style="text-align:left;">Jugador</th><th>Pts</th><th>✅</th><th>✔</th><th>❌</th><th>vs 1°</th><th>En curso</th>
         </tr></thead>
         <tbody>
-          ${rank.length===0?`<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px;">Sin participantes guardados</td></tr>`:
+          ${rank.length===0?`<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:16px;">Sin participantes guardados</td></tr>`:
           rank.map((u,i)=>{
             const isLocked=u.locked!==false;
             const rowCls=isLocked?(i===0?'top1':i===1?'top2':i===2?'top3':''):'';
@@ -2884,6 +2885,7 @@ function buildPublicRankingCard(qName){
                <td><span class="bs bs-ok">${isLocked?u.correct:'—'}</span></td>
               <td><span class="bs bs-r">${isLocked?u.miss:'—'}</span></td>
               <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>
+            <td>${(()=>{ const p=getUserPickForCurrent((getQ(qName)||{}).users?.[u.n],getCurrentMatchItem()); return p?`<span class="current-pick">${p}</span>`:`<span class="current-pick missing">—</span>`; })()}</td>
             </tr>`;
           }).join('')}
         </tbody>
