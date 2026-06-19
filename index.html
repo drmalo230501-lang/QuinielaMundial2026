@@ -678,27 +678,96 @@ function _invalidateStandingsCache(){
   _thirdsCache=new Map();
   }
 
+  function _applyMatchToTable(table, home, away, homeGoals, awayGoals){
+  const ht=table.get(home), at=table.get(away);
+  if(!ht||!at) return;
+  ht.gf+=homeGoals; ht.ga+=awayGoals; ht.gd+=homeGoals-awayGoals;
+  at.gf+=awayGoals; at.ga+=homeGoals; at.gd+=awayGoals-homeGoals;
+  if(homeGoals>awayGoals){ht.pts+=3;ht.w++;at.l++;}
+  else if(awayGoals>homeGoals){at.pts+=3;at.w++;ht.l++;}
+  else{ht.pts+=1;ht.d++;at.pts+=1;at.d++;}
+}
+
+function _playedScore(predsObj, matchId){
+  const p=predsObj&&predsObj[matchId];
+  if(!p||p.h===''||p.h===undefined||p.a===''||p.a===undefined) return null;
+  const h=parseInt(p.h), a=parseInt(p.a);
+  if(isNaN(h)||isNaN(a)) return null;
+  return {h,a};
+}
+
+function _headToHeadStats(teams, matches, predsObj){
+  const tiedNames=new Set(teams.map(x=>x.t));
+  const table=new Map(teams.map(x=>[x.t,{t:x.t,pts:0,gf:0,ga:0,gd:0,w:0,d:0,l:0}]));
+  matches.forEach(m=>{
+    if(!tiedNames.has(m.h)||!tiedNames.has(m.a)) return;
+    const score=_playedScore(predsObj,m.id);
+    if(!score) return;
+    _applyMatchToTable(table,m.h,m.a,score.h,score.a);
+  });
+  return table;
+}
+
+function _sortTiedTeamsByHeadToHead(tiedTeams, matches, predsObj){
+  if(tiedTeams.length<=1) return tiedTeams;
+  const h2h=_headToHeadStats(tiedTeams,matches,predsObj);
+  const initiallySorted=[...tiedTeams].sort((a,b)=>{
+    const ah=h2h.get(a.t), bh=h2h.get(b.t);
+    return (bh.pts-ah.pts)||(bh.gd-ah.gd)||(bh.gf-ah.gf);
+  });
+
+  const resolved=[];
+  for(let i=0;i<initiallySorted.length;){
+    const current=initiallySorted[i];
+    const currentH=h2h.get(current.t);
+    const same=[current];
+    let j=i+1;
+    while(j<initiallySorted.length){
+      const next=initiallySorted[j];
+      const nextH=h2h.get(next.t);
+      if(nextH.pts===currentH.pts&&nextH.gd===currentH.gd&&nextH.gf===currentH.gf){same.push(next);j++;}
+      else break;
+    }
+    if(same.length===1){
+      resolved.push(current);
+    }else if(same.length<tiedTeams.length){
+      resolved.push(..._sortTiedTeamsByHeadToHead(same,matches,predsObj));
+    }else{
+      resolved.push(...same.sort((a,b)=>
+        (b.gd-a.gd)||(b.gf-a.gf)||(GROUPS[a.g]?.indexOf(a.t)??0)-(GROUPS[b.g]?.indexOf(b.t)??0)
+      ));
+    }
+    i=j;
+  }
+  return resolved;
+}
+
+function _sortGroupTeams(teams, matches, predsObj){
+  const byPoints=[...teams].sort((a,b)=>b.pts-a.pts);
+  const sorted=[];
+  for(let i=0;i<byPoints.length;){
+    const pts=byPoints[i].pts;
+    const tied=[];
+    while(i<byPoints.length&&byPoints[i].pts===pts){tied.push(byPoints[i]);i++;}
+    sorted.push(..._sortTiedTeamsByHeadToHead(tied,matches,predsObj));
+  }
+  return sorted;
+}
+  
 function getGroupStandings(g, predsObj){
   predsObj=predsObj||{};
   const matches=ALL.filter(m=>m.g===g);
   const cacheKey=g+'|'+_scoresCacheKey(matches,predsObj);
   if(_standingsCache.has(cacheKey)) return _standingsCache.get(cacheKey);
 
-  const teams=GROUPS[g].map(t=>({t,pts:0,gf:0,ga:0,gd:0,w:0,d:0,l:0}));
+  const teams=GROUPS[g].map(t=>({t,g,pts:0,gf:0,ga:0,gd:0,w:0,d:0,l:0}));
+  const table=new Map(teams.map(t=>[t.t,t]));
   matches.forEach(m=>{
-    const p=predsObj[m.id];
-    if(!p||p.h===''||p.h===undefined||p.a===''||p.a===undefined) return;
-    const rh=parseInt(p.h),ra=parseInt(p.a);
-    if(isNaN(rh)||isNaN(ra)) return;
-    const ht=teams.find(x=>x.t===m.h), at=teams.find(x=>x.t===m.a);
-    if(!ht||!at) return;
-    ht.gf+=rh; ht.ga+=ra; ht.gd+=rh-ra;
-    at.gf+=ra; at.ga+=rh; at.gd+=ra-rh;
-    if(rh>ra){ht.pts+=3;ht.w++;at.l++;}
-    else if(ra>rh){at.pts+=3;at.w++;ht.l++;}
-    else{ht.pts+=1;ht.d++;at.pts+=1;at.d++;}
+     const score=_playedScore(predsObj,m.id);
+    if(!score) return;
+    _applyMatchToTable(table,m.h,m.a,score.h,score.a);
   });
-  const result=teams.sort((a,b)=>b.pts-a.pts||b.gd-a.gd||b.gf-a.gf);
+  const result=_sortGroupTeams(teams,matches,predsObj);
   _standingsCache.set(cacheKey, result);
   return result;
 }
