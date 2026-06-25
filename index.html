@@ -573,6 +573,7 @@ async function load(){
             const saved = JSON.parse(raw);
             if(saved.preds) S.quinielas[qName].users[userName].preds = saved.preds;
             if(saved.kopreds) S.quinielas[qName].users[userName].kopreds = saved.kopreds;
+         if(saved.realkopreds) S.quinielas[qName].users[userName].realkopreds = saved.realkopreds;
           }
         }catch(e){}
       });
@@ -614,7 +615,7 @@ async function saveUserPreds(){
   const u=(S.quinielas[qName]||{}).users?.[userName];
   if(!u) return;
   const key=qName+'__'+userName;
-  const json=JSON.stringify({preds:u.preds||{},kopreds:u.kopreds||{}});
+  const json=JSON.stringify({preds:u.preds||{},kopreds:u.kopreds||{},realkopreds:u.realkopreds||{}});
   if(_predsTimer) clearTimeout(_predsTimer);
   _predsTimer=setTimeout(async()=>{
     try{
@@ -653,7 +654,7 @@ async function saveNow(){
       const u=(S.quinielas[qName]||{}).users?.[userName];
       if(u){
         const key=qName+'__'+userName;
-        const predsJson=JSON.stringify({preds:u.preds||{},kopreds:u.kopreds||{}});
+        const predsJson=JSON.stringify({preds:u.preds||{},kopreds:u.kopreds||{},realkopreds:u.realkopreds||{}});
         await _db.collection('preds').doc(SK).set({[key]:predsJson},{merge:true});
       }
     }
@@ -1432,7 +1433,7 @@ function calcStats(preds, kopreds, opts={}){  const R=getResults();
   const realRes=R.results||{};
   const realKO=R.koresults||{};
   let total=0,exact=0,winner=0,miss=0,played=0;
-  // Groups
+  // Groups keep original scoring: +2 exact, +1 winner.
   for(const m of ALL){
      if(opts.excludeType==='group'&&opts.excludeId===m.id) continue;
     const res=matchResult(preds[m.id],realRes[m.id]);
@@ -1442,38 +1443,37 @@ function calcStats(preds, kopreds, opts={}){  const R=getResults();
     else if(res==='winner'){winner++;total+=1;}
     else miss++;
   }
-  // KO — score only if teams the user predicted match the teams that actually played
+  // Initial KO bracket: scores no longer count. Award only +1 if both teams in the predicted matchup match the real matchup.
   if(kopreds){
-    const realPreds=realRes; // group results already in realRes
     for(const m of KO_MATCHES){
        if(opts.excludeType==='ko'&&opts.excludeId===m.id) continue;
       const real=realKO[m.id];
-      if(!real||real.h===''||real.h===undefined) continue; // not played yet
+      if(!real||(!real.confirmed&&real.h===''&&real.h!==0)) continue;
       const pred=kopreds[m.id];
-      if(!pred||pred.h===''||pred.h===undefined) { miss++; played++; continue; } // user didn't predict
-
-      // Resolve which teams ACTUALLY played using real results
-      const realTeamH=resolveKOTeam(m.hPos, realPreds, realKO);
-      const realTeamA=resolveKOTeam(m.aPos, realPreds, realKO);
-
-      // Resolve which teams the USER expected to play
-      const userPreds=preds; // group predictions of this user
-      const userKO=kopreds;
-      const userTeamH=resolveKOTeam(m.hPos, userPreds, userKO);
-      const userTeamA=resolveKOTeam(m.aPos, userPreds, userKO);
-
-      // Teams must match for the prediction to be valid
-      const teamsMatch=(userTeamH===realTeamH&&userTeamA===realTeamA)||
-                       (userTeamH===realTeamA&&userTeamA===realTeamH);
-
+      if(!pred) { miss++; played++; continue; }
+      const actual=getActualKOTeams(m);
+      const realTeamH=actual.h, realTeamA=actual.a;
+      if(!realTeamH||!realTeamA||realTeamH==='?'||realTeamA==='?') continue;
+      const userTeamH=resolveKOTeam(m.hPos, preds, kopreds);
+      const userTeamA=resolveKOTeam(m.aPos, preds, kopreds);
+      const teamsMatch=(userTeamH===realTeamH&&userTeamA===realTeamA)||(userTeamH===realTeamA&&userTeamA===realTeamH);
       played++;
-      if(!teamsMatch){ miss++; continue; } // wrong teams — automatic miss
-
-      const res=matchResult(pred,real);
-      if(res==='exact'){exact++;total+=2;}
-      else if(res==='winner'){winner++;total+=1;}
-      else miss++;
+      if(teamsMatch){winner++;total+=1;} else miss++;
     }
+    }
+  // Real confirmed KO predictions: +1 winner, +1 extra exact score.
+  const realkopreds=opts.realkopreds||{};
+  for(const m of KO_MATCHES){
+    if(opts.excludeType==='realko'&&opts.excludeId===m.id) continue;
+    const real=realKO[m.id];
+    if(!real||real.h===''||real.h===undefined||real.a===''||real.a===undefined) continue;
+    const pred=realkopreds[m.id];
+    const res=matchResult(pred,real);
+    if(res==='pending'){miss++;played++;continue;}
+    played++;
+    if(res==='exact'){exact++;total+=2;}
+    else if(res==='winner'){winner++;total+=1;}
+    else miss++;
   }
  return{total,exact,winner,miss,played,correct:exact+winner};
                                             }
@@ -1501,7 +1501,7 @@ function assignRankingPositions(ranked){
   const q=getQ(quinielaName); if(!q||!latest) return {};
   const excludeType=latest.type==='ko'?'ko':'group';
   const prevRank=Object.entries(q.users||{}).filter(([,u])=>u.locked)
-    .map(([n,u])=>({n,...calcStats(u.preds||{},u.kopreds||{},{excludeType,excludeId:latest.match.id}),locked:true}))
+    .map(([n,u])=>({n,...calcStats(u.preds||{},u.kopreds||{},{excludeType,excludeId:latest.match.id,realkopreds:u.realkopreds||{}}),locked:true}))
    .sort(compareRankingStats);
   assignRankingPositions(prevRank);
   const prevPos={};
@@ -1519,7 +1519,7 @@ function getRanking(quinielaName){
   const q=getQ(quinielaName); if(!q) return [];
   // Locked users with stats first, then unlocked users with 0 pts at bottom
   const lockedUsers=Object.entries(q.users||{}).filter(([,u])=>u.locked)
-    .map(([n,u])=>({n,...calcStats(u.preds||{},u.kopreds||{}),locked:true}))
+   .map(([n,u])=>({n,...calcStats(u.preds||{},u.kopreds||{},{realkopreds:u.realkopreds||{}}),locked:true}))
    .sort(compareRankingStats);
   const unlockedUsers=Object.entries(q.users||{}).filter(([,u])=>!u.locked)
     .map(([n,u])=>({n,total:0,exact:0,winner:0,miss:0,played:0,correct:0,locked:false,move:{places:0,dir:'same'}}))
@@ -2164,15 +2164,30 @@ function buildMatchCard(m,pred,locked){
   </div>`;
 }
 
+  // ===================== ELIMINACIÓN =====================
+function getActualKOTeams(m){
+  const R=getResults();
+  const ov=(R.kooverrides||{})[m.id]||{};
+  const realRes=R.results||{};
+  const realKO=R.koresults||{};
+  return {
+    h: ov.h || resolveKOTeam(m.hPos,realRes,realKO),
+    a: ov.a || resolveKOTeam(m.aPos,realRes,realKO)
+  };
+}
+function isRealKOConfirmed(id){
+  const r=(getResults().koresults||{})[id];
+  return !!(r&&r.confirmed);
+}
+function realKOMatchAvailable(m){
+  const t=getActualKOTeams(m);
+  return isRealKOConfirmed(m.id)&&t.h&&t.a&&t.h!=='?'&&t.a!=='?';
+}
+
 // ===================== ELIMINACIÓN =====================
 function buildEliminacion(){
   const user=curUser();
   const locked=user&&user.locked;
-  const preds=(user&&user.preds)||{};
-  const kopreds=(user&&user.kopreds)||{};
-  const koLocked=user&&user.kolocked;
-  const R=getResults();
-  const groupsFilled=ALL.filter(m=>preds[m.id]&&preds[m.id].h!==''&&preds[m.id].a!=='').length===TOTAL;
   if(!locked){
     return `<div style="padding:10px;">
       <div class="card" style="text-align:center;padding:24px 14px;">
@@ -2182,127 +2197,71 @@ function buildEliminacion(){
         <button class="btn btn-primary" style="margin-top:14px;" onclick="ST('grupos')">Ir a fase de grupos →</button>
       </div></div>`;
   }
+  const sub=S._elimTab||'proyectada';
+  const tabBar=`<div style="display:flex;gap:0;border-radius:10px;overflow:hidden;border:1px solid var(--border);margin:10px;">
+    <button onclick="S._elimTab='proyectada';render()" style="flex:1;padding:9px 6px;border:none;cursor:pointer;font-size:12px;font-weight:700;background:${sub==='proyectada'?'var(--gold)':'rgba(255,255,255,0.05)'};color:${sub==='proyectada'?'#000':'var(--muted)'};">📋 Predicción inicial</button>
+    <button onclick="S._elimTab='real';render()" style="flex:1;padding:9px 6px;border:none;cursor:pointer;font-size:12px;font-weight:700;background:${sub==='real'?'var(--gold)':'rgba(255,255,255,0.05)'};color:${sub==='real'?'#000':'var(--muted)'};">✅ Partidos reales</button>
+  </div>`;
+  return tabBar+(sub==='real'?buildEliminacionReal():buildEliminacionProyectada());
+}
+
+function buildEliminacionProyectada(){
+  const user=curUser();
+  const preds=(user&&user.preds)||{};
+  const kopreds=(user&&user.kopreds)||{};
+  const koLocked=user&&user.kolocked;
   const koFilled=KO_MATCHES.filter(m=>kopreds[m.id]&&kopreds[m.id].h!==''&&kopreds[m.id].a!=='').length;
   const koTotal=KO_MATCHES.length;
-  // Determine which rounds are visible:
-  // D16 always visible once groups locked
-  // R16 visible when at least 1 D16 has a winner in kopreds
-  // QF visible when at least 1 R16 has a winner, etc.
   function roundHasWinner(round){
     return KO_MATCHES.filter(m=>m.round===round).some(m=>{
       const kp=kopreds[m.id];
       if(!kp||kp.h===''||kp.a==='') return false;
       const h=parseInt(kp.h),a=parseInt(kp.a);
       if(isNaN(h)||isNaN(a)) return false;
-      if(h!==a) return true; // clear winner from score
-      return !!(kp.penWin); // draw with penales winner selected
+      return h!==a||!!kp.penWin;
     });
   }
-  function roundHasPenWinner(round){
-    // For draws, check if win button was pressed (stored in kopreds.win)
-    return KO_MATCHES.filter(m=>m.round===round).some(m=>{
-      const kp=kopreds[m.id];
-      if(!kp) return false;
-      const h=parseInt(kp.h),a=parseInt(kp.a);
-      if(!isNaN(h)&&!isNaN(a)&&h!==a) return true; // clear winner
-      return false;
-    });
-  }
-
-  const roundVisible={
-    'D16': true,
-    'R16': roundHasWinner('D16'),
-    'QF':  roundHasWinner('R16'),
-    'SF':  roundHasWinner('QF'),
-    '3P':  roundHasWinner('SF'),
-    'FIN': roundHasWinner('SF'),
-  };
-
+const roundVisible={'D16':true,'R16':roundHasWinner('D16'),'QF':roundHasWinner('R16'),'SF':roundHasWinner('QF'),'3P':roundHasWinner('SF'),'FIN':roundHasWinner('SF')};
   const visibleRounds=['D16','R16','QF','SF','3P','FIN'].filter(r=>roundVisible[r]);
-  const koFilled2=KO_MATCHES.filter(m=>roundVisible[m.round]&&kopreds[m.id]&&kopreds[m.id].h!==''&&kopreds[m.id].a!=='').length;
-  const koTotal2=KO_MATCHES.filter(m=>roundVisible[m.round]).length;
+ return `${koLocked?`<div class="alert alert-w" style="margin:10px;">🔒 Predicción inicial guardada. Los marcadores ya no cuentan puntos; solo se evalúan los cruces correctos.</div>`:`<div class="prog-wrap"><div class="flex-between" style="font-size:11px;margin-bottom:4px;"><span style="color:var(--muted);">Partidos disponibles: <strong style="color:#fff;">${koFilled}/${koTotal}</strong></span>${koFilled===koTotal?`<span style="color:var(--green);font-size:11px;font-weight:700;">✅ Completo</span>`:`<span class="locked-tag">Sin guardar</span>`}</div><div class="prog-bar"><div class="prog-fill" style="width:${Math.round((koFilled/koTotal)*100)}%"></div></div></div><div class="alert alert-w" style="margin:10px;">⚙️ El marcador solo se usa para calcular quién avanza en tu bracket inicial; no dará puntos por marcador.</div>`}
+  ${visibleRounds.map(r=>`<div class="ko-round-label">${ROUND_LABELS[r]}</div>${KO_MATCHES.filter(m=>m.round===r).map(m=>buildProjectedKOCard(m,preds,kopreds,koLocked)).join('')}`).join('')}
+  ${!koLocked?`<div style="padding:10px 10px 0;"><button class="btn ${koFilled===koTotal?'btn-success':'btn-secondary'} btn-full" ${koFilled===koTotal?'':'disabled style="opacity:0.4;"'} onclick="LKO()">${koFilled===koTotal?'🔒 Guardar y bloquear eliminatoria':'⏳ Faltan '+(koTotal-koFilled)+' partidos de '+koTotal}</button></div>`:''}`;
+}
 
-  return `
-  ${koLocked
-    ?`<div class="alert alert-w" style="margin:10px;">🔒 Fase eliminatoria guardada. ¡Buena suerte!</div>`
-    :`<div class="prog-wrap">
-        <div class="flex-between" style="font-size:11px;margin-bottom:4px;">
-          <span style="color:var(--muted);">Partidos disponibles: <strong style="color:#fff;">${koFilled}/${koTotal}</strong></span>
-          ${koFilled===koTotal?`<span style="color:var(--green);font-size:11px;font-weight:700;">✅ Completo</span>`:`<span class="locked-tag">Sin guardar</span>`}
-        </div>
-        <div class="prog-bar"><div class="prog-fill" style="width:${Math.round((koFilled/koTotal)*100)}%"></div></div>
-      </div>
-      <div class="alert alert-w" style="margin:10px;">⚙️ Conforme vayas eligiendo ganadores, se irán desbloqueando los siguientes cruces automáticamente.</div>`
+  function buildProjectedKOCard(m,preds,kopreds,koLocked){
+  const ht=resolveKOTeam(m.hPos,preds,kopreds), at=resolveKOTeam(m.aPos,preds,kopreds);
+  const kp=kopreds[m.id]||{h:'',a:''};
+  const ph=kp.h, pa=kp.a, phn=ph===''?-1:parseInt(ph), pan=pa===''?-1:parseInt(pa);
+  const win=phn>=0&&pan>=0?(phn>pan?'h':pan>phn?'a':(kp.penWin||'d')):'';
+  const unknown=ht==='?'||at==='?';
+  if(koLocked){
+    return `<div class="ko-match mcard" data-ko-match-id="${m.id}"><div class="ko-match-lbl">${m.label} · ${m.d} · ${m.v}</div><div class="ko-teams"><div class="ko-team"><span class="ko-flag">${F(ht)}</span><span class="ko-name ${win==='h'?'winner':''}">${ht}</span></div><div class="ko-score-center"><div style="font-size:11px;color:var(--muted);font-weight:700;">${win==='h'?`Avanza ${ht}`:win==='a'?`Avanza ${at}`:'Ganador por definir'}</div></div><div class="ko-team"><span class="ko-flag">${F(at)}</span><span class="ko-name ${win==='a'?'winner':''}">${at}</span></div></div></div>`;`
   }
-  ${visibleRounds.map(r=>{
-    const ms=KO_MATCHES.filter(m=>m.round===r);
-    return `<div class="ko-round-label">${ROUND_LABELS[r]}</div>
-    ${ms.map(m=>{
-      const ht=resolveKOTeam(m.hPos,preds,kopreds);
-      const at=resolveKOTeam(m.aPos,preds,kopreds);
-      const kp=kopreds[m.id]||{h:'',a:''};
-      const ph=kp.h, pa=kp.a;
-      const phn=ph===''?-1:parseInt(ph), pan=pa===''?-1:parseInt(pa);
-      // win: 'h'=local, 'a'=visitante, 'd'=empate(sin penales), ''=sin datos
-      // If draw and penWin set, the penWin button should be active
-      const win=phn>=0&&pan>=0?(phn>pan?'h':pan>phn?'a':(kp.penWin||'d')):'';
-      const dis=koLocked?'disabled':'';
-      const unknown=ht==='?'||at==='?';
-      // Determine result color class (same logic as group stage cards)
-      const rr=R.koresults[m.id];
-      let koCardCls='';
-      let koResBadge='';
-      if(rr&&rr.h!==''&&rr.h!==undefined&&!unknown){
-        const realTeamH=resolveKOTeam(m.hPos,R.results||{},R.koresults||{});
-        const realTeamA=resolveKOTeam(m.aPos,R.results||{},R.koresults||{});
-        const teamsOk=(ht===realTeamH&&at===realTeamA)||(ht===realTeamA&&at===realTeamH);
-        const res=teamsOk?matchResult(kp,rr):'miss';
-        koCardCls=res==='exact'?'exact':res==='winner'?'winner':'miss';
-        const bl=res==='exact'?['rb-exact','✅ +2pts']:res==='winner'?['rb-winner','✔ +1pt']:['rb-miss','❌ 0pts'];
-        koResBadge=`<span class="mcard-result-badge ${bl[0]}">${bl[1]}</span>`;
-      }
-      return `<div class="ko-match mcard ${koCardCls}" data-ko-match-id="${m.id}">
-        <div class="ko-match-lbl" style="display:flex;justify-content:space-between;align-items:center;">
-            <span>${m.label} · ${m.d} · ${m.v}</span>
-            ${koResBadge}
-          </div>
-        <div class="ko-teams">
-          <div class="ko-team">
-            <span class="ko-flag">${F(ht)}</span>
-            <span class="ko-name ${win==='h'?'winner':''}">${ht}</span>
-          </div>
-          <div class="ko-score-center">
-            <div class="ko-score-row">
-              <input type="number" class="ko-score-inp" min="0" max="20" value="${ph}" ${dis||unknown?'disabled':''} 
-                oninput="SKO('${m.id}','h',this.value)" inputmode="numeric" pattern="[0-9]*" />
-              <span class="ko-vs">-</span>
-              <input type="number" class="ko-score-inp" min="0" max="20" value="${pa}" ${dis||unknown?'disabled':''} 
-                oninput="SKO('${m.id}','a',this.value)" inputmode="numeric" pattern="[0-9]*" />
-            </div>
-            <div class="ko-win-btns">
-              <button class="ko-win-btn ${win==='h'?'active':''}" data-win="h" ${dis||unknown?'disabled':''} onclick="SWKO('${m.id}','h')">${F(ht)}</button>
-              <button class="ko-win-btn ${win==='a'?'active':''}" data-win="a" ${dis||unknown?'disabled':''} onclick="SWKO('${m.id}','a')">${F(at)}</button>
-            </div>
-            ${unknown?`<div class="ko-pen-note">Equipos aún no definidos</div>`:`<div class="ko-pen-note">En caso de empate, indica quién gana en penales (marca ganador)</div>`}
-            ${(()=>{
-              if(!rr||rr.h===''||rr.h===undefined) return '';
-              return `<div style="margin-top:4px;font-size:10px;text-align:center;color:var(--muted);">Real: <strong style="color:#fff">${rr.h}-${rr.a}</strong></div>`;
-            })()}
-          </div>
-          <div class="ko-team">
-            <span class="ko-flag">${F(at)}</span>
-            <span class="ko-name ${win==='a'?'winner':''}">${at}</span>
-          </div>
-        </div>
-      </div>`;
-    }).join('')}`;
-  }).join('')}
-  ${!koLocked?`<div style="padding:10px 10px 0;">
-    <button class="btn ${koFilled===koTotal?'btn-success':'btn-secondary'} btn-full"
-      ${koFilled===koTotal?'':'disabled style="opacity:0.4;"'}
-      onclick="LKO()">${koFilled===koTotal?'🔒 Guardar y bloquear eliminatoria':'⏳ Faltan '+(koTotal-koFilled)+' partidos de '+koTotal}</button>
-    ${koTotal<KO_MATCHES.length?`<div style="font-size:10px;color:var(--muted);text-align:center;margin-top:6px;">Los cruces siguientes se desbloquean al elegir ganadores</div>`:''}
-  </div>`:''}`;
+  const dis=unknown?'disabled':'';
+  return `<div class="ko-match mcard" data-ko-match-id="${m.id}"><div class="ko-match-lbl">${m.label} · ${m.d} · ${m.v}</div><div class="ko-teams"><div class="ko-team"><span class="ko-flag">${F(ht)}</span><span class="ko-name ${win==='h'?'winner':''}">${ht}</span></div><div class="ko-score-center"><div class="ko-score-row"><input type="number" class="ko-score-inp" min="0" max="20" value="${ph}" ${dis} oninput="SKO('${m.id}','h',this.value)" inputmode="numeric" pattern="[0-9]*" /><span class="ko-vs">-</span><input type="number" class="ko-score-inp" min="0" max="20" value="${pa}" ${dis} oninput="SKO('${m.id}','a',this.value)" inputmode="numeric" pattern="[0-9]*" /></div><div class="ko-win-btns"><button class="ko-win-btn ${win==='h'?'active':''}" data-win="h" ${dis} onclick="SWKO('${m.id}','h')">${F(ht)}</button><button class="ko-win-btn ${win==='a'?'active':''}" data-win="a" ${dis} onclick="SWKO('${m.id}','a')">${F(at)}</button></div><div class="ko-pen-note">${unknown?'Equipos aún no definidos':'El marcador define quién avanza; no suma puntos por exacto.'}</div></div><div class="ko-team"><span class="ko-flag">${F(at)}</span><span class="ko-name ${win==='a'?'winner':''}">${at}</span></div></div></div>`;
+}
+
+function buildEliminacionReal(){
+  const user=curUser();
+  const realkopreds=(user&&user.realkopreds)||{};
+  const available=KO_MATCHES.filter(realKOMatchAvailable);
+  if(!available.length) return `<div style="padding:24px;text-align:center;color:var(--muted);font-size:12px;">⏳ Aquí aparecerán los partidos reales cuando el administrador los confirme.</div>`;
+  return `<div class="alert alert-w" style="margin:10px;">✅ Estos son los cruces reales confirmados. Predice marcador: +1 por ganador y +1 extra por marcador exacto.</div>${['D16','R16','QF','SF','3P','FIN'].map(r=>{const ms=available.filter(m=>m.round===r);return ms.length?`<div class="ko-round-label">${ROUND_LABELS[r]}</div>${ms.map(m=>buildRealKOUserCard(m,realkopreds)).join('')}`:'';}).join('')}`;
+}
+function buildRealKOUserCard(m,realkopreds){
+  const t=getActualKOTeams(m), p=realkopreds[m.id]||{h:'',a:''};
+  const rr=(getResults().koresults||{})[m.id];
+  const played=rr&&rr.h!==''&&rr.h!==undefined&&rr.a!==''&&rr.a!==undefined;
+  const res=played?matchResult(p,rr):'pending';
+  const cls=res==='exact'?'exact':res==='winner'?'winner':res==='miss'?'miss':'';
+  const badge=played?`<span class="mcard-result-badge ${res==='exact'?'rb-exact':res==='winner'?'rb-winner':'rb-miss'}">${res==='exact'?'✅ +2pts':res==='winner'?'✔ +1pt':'❌ 0pts'}</span>`:'';
+  const dis=(userCanEditRealKO(m.id)&&!played)?'':'disabled';
+  const ph=p.h??'', pa=p.a??'';
+  return `<div class="ko-match mcard ${cls}"><div class="ko-match-lbl" style="display:flex;justify-content:space-between;align-items:center;"><span>${m.label} · ${m.d} · ${m.v}</span>${badge}</div><div class="ko-teams"><div class="ko-team"><span class="ko-flag">${F(t.h)}</span><span class="ko-name">${t.h}</span></div><div class="ko-score-center"><div class="ko-score-row"><input type="number" class="ko-score-inp" min="0" max="20" value="${ph}" ${dis} oninput="SRKO('${m.id}','h',this.value)" inputmode="numeric" pattern="[0-9]*" /><span class="ko-vs">-</span><input type="number" class="ko-score-inp" min="0" max="20" value="${pa}" ${dis} oninput="SRKO('${m.id}','a',this.value)" inputmode="numeric" pattern="[0-9]*" /></div>${played?`<div style="margin-top:4px;font-size:10px;text-align:center;color:var(--muted);">Real: <strong style="color:#fff">${rr.h}-${rr.a}</strong></div>`:`<div class="ko-pen-note">Predicción abierta hasta que se capture el resultado.</div>`}</div><div class="ko-team"><span class="ko-flag">${F(t.a)}</span><span class="ko-name">${t.a}</span></div></div></div>`;
+}
+function userCanEditRealKO(id){
+  const r=(getResults().koresults||{})[id];
+  return !!(r&&r.confirmed&&!(r.h!==''&&r.h!==undefined&&r.a!==''&&r.a!==undefined));
 }
 
 // ===================== RESULTADOS =====================
@@ -3288,6 +3247,7 @@ function buildAdminKOResults(){
               <input type="number" class="ko-score-inp" min="0" max="20" value="${r.a}" oninput="SKR('${m.id}','a',this.value)" inputmode="numeric" pattern="[0-9]*" />
             </div>`:`<span style="font-size:10px;color:var(--muted);">Pendiente</span>`}
             ${hasR?`<span class="mcard-result-badge rb-winner" style="margin-top:3px;">✅ Guardado</span>`:''}
+            ${readyFinal?`<button onclick="CONFIRM_KO_MATCH('${m.id}')" style="margin-top:4px;font-size:9px;padding:2px 7px;border-radius:8px;border:1px solid ${r.confirmed?'rgba(0,200,83,0.45)':'rgba(255,215,0,0.3)'};background:${r.confirmed?'rgba(0,200,83,0.12)':'rgba(255,215,0,0.08)'};color:${r.confirmed?'#69ff6e':'var(--gold)'};cursor:pointer;">${r.confirmed?'✅ Partido confirmado':'🔓 Confirmar partido'}</button>`:''}
             ${S.isCoadmin?'':
             `<button onclick="OPEN_OVERRIDE('${m.id}','${dispH||''}','${dispA||''}')"
               style="margin-top:4px;font-size:9px;padding:2px 7px;border-radius:8px;border:1px solid rgba(255,215,0,0.3);background:rgba(255,215,0,0.08);color:var(--gold);cursor:pointer;">
@@ -3330,7 +3290,7 @@ function buildAdminQSelector(activeTab){
       </div>
       ${us.length===0?'<p style="color:var(--muted);font-size:11px;text-align:center;padding:8px;">Sin participantes</p>':
         us.map(([n,u])=>{
-          const stats=calcStats(u.preds||{},u.kopreds||{});
+          const stats=calcStats(u.preds||{},u.kopreds||{},{realkopreds:u.realkopreds||{}});
           return `<div style="display:flex;align-items:center;gap:7px;padding:7px 8px;background:rgba(255,255,255,0.03);border-radius:8px;margin-bottom:5px;border:1px solid rgba(255,255,255,0.07);">
             <span style="font-size:16px;">${u.locked?'🔒':'✏️'}</span>
               <div style="flex:1;min-width:0;cursor:pointer;" onclick="ADMIN_VIEW_PROFILE('${n}','${qn}')">
@@ -3428,7 +3388,7 @@ function buildAdminUsers(){
       </div>
       ${us.length===0?`<p style="color:var(--muted);text-align:center;padding:16px;">Sin participantes</p>`
       :us.map(([n,u])=>{
-        const stats=calcStats(u.preds||{});
+        const stats=calcStats(u.preds||{},u.kopreds||{},{realkopreds:u.realkopreds||{}});
         return `<div style="display:flex;align-items:center;gap:8px;padding:9px 10px;background:var(--card2);border-radius:10px;margin-bottom:6px;border:1px solid var(--border);">
           <div style="font-size:18px;">${u.locked?'🔒':'✏️'}</div>
           <div style="flex:1;min-width:0;">
@@ -3595,7 +3555,7 @@ window.VIEW_PROFILE=function(playerName, qName){
     </tr>`;
   }
 
-  const stats=calcStats(preds,kopreds);
+  const stats=calcStats(preds,kopreds,{realkopreds:u.realkopreds||{}});
 
   const groupRows=[[J1,'Jornada 1'],[J2,'Jornada 2'],[J3,'Jornada 3']].map(([jm,jl])=>`
     <tr><td colspan="6" style="padding:8px 6px 4px;font-size:10px;font-weight:800;color:var(--gold);background:rgba(255,215,0,0.05);">⚽ ${jl}</td></tr>
@@ -3605,21 +3565,18 @@ window.VIEW_PROFILE=function(playerName, qName){
     const pred=kopreds[m.id];
     const real=realKO[m.id];
     const hasReal=real&&real.h!==''&&real.h!==undefined;
-    const predTxt=pred&&pred.h!==''?`${pred.h}-${pred.a}`:'—';
-    const realTxt=hasReal?`${real.h}-${real.a}`:'—';
     const userH=resolveKOTeam(m.hPos,preds,kopreds);
     const userA=resolveKOTeam(m.aPos,preds,kopreds);
+    const winTeam=pred&&pred.h!==''?(parseInt(pred.h)>parseInt(pred.a)?userH:parseInt(pred.a)>parseInt(pred.h)?userA:(pred.penWin==='h'?userH:pred.penWin==='a'?userA:'—')):'—';
+    const predTxt=winTeam&&winTeam!=='—'?`Avanza ${winTeam}`:'—';
+    const realTxt=hasReal?`${real.h}-${real.a}`:'—';
     let ptsBadge='';
-    if(hasReal&&pred&&pred.h!==''){
-      const realH=resolveKOTeam(m.hPos,realRes,realKO);
-      const realA=resolveKOTeam(m.aPos,realRes,realKO);
-      const ok=(userH===realH&&userA===realA)||(userH===realA&&userA===realH);
-      const r=ok?matchResult(pred,real):'miss';
-      ptsBadge=r==='exact'?'<span class="mcard-result-badge rb-exact">+2</span>':
-                r==='winner'?'<span class="mcard-result-badge rb-winner">+1</span>':
-                r==='miss'?'<span class="mcard-result-badge rb-miss">0</span>':'';
+    if((hasReal||real?.confirmed)&&pred){
+      const actual=getActualKOTeams(m);
+      const ok=(userH===actual.h&&userA===actual.a)||(userH===actual.a&&userA===actual.h);
+      ptsBadge=ok?'<span class="mcard-result-badge rb-winner">+1 cruce</span>':'<span class="mcard-result-badge rb-miss">0</span>';
     }
-    const rowBg=ptsBadge.includes('rb-exact')?'rgba(0,200,83,0.08)':ptsBadge.includes('rb-winner')?'rgba(255,215,0,0.06)':ptsBadge.includes('rb-miss')?'rgba(220,50,50,0.07)':'';
+    const rowBg=ptsBadge.includes('rb-winner')?'rgba(255,215,0,0.06)':ptsBadge.includes('rb-miss')?'rgba(220,50,50,0.07)':'';
     return `<tr style="background:${rowBg};border-bottom:1px solid rgba(255,255,255,0.04);">
       <td style="padding:5px 6px;font-size:10px;color:var(--muted);">${m.label}</td>
       <td style="padding:5px 6px;font-size:10px;">${F(userH)} ${(userH||'').slice(0,8)}</td>
@@ -3634,7 +3591,7 @@ window.VIEW_PROFILE=function(playerName, qName){
     <th style="padding:5px 6px;font-size:9px;color:var(--muted);">Partido</th>
     <th style="padding:5px 6px;font-size:9px;color:var(--muted);">Local</th>
     <th style="padding:5px 6px;font-size:9px;color:var(--muted);">Visitante</th>
-    <th style="padding:5px 6px;font-size:9px;color:var(--muted);text-align:center;">Mi pred</th>
+    <th style="padding:5px 6px;font-size:9px;color:var(--muted);text-align:center;">Predicción</th>
     <th style="padding:5px 6px;font-size:9px;color:var(--muted);text-align:center;">Real</th>
     <th style="padding:5px 6px;font-size:9px;color:var(--muted);text-align:center;">Pts</th>
   </tr></thead>`;
@@ -3787,7 +3744,7 @@ window.DL_SETPIN=()=>{
 
   const {name,qName}=S._loginData;
   const q=S.quinielas[qName];
-  if(!q.users[name]) q.users[name]={preds:{},kopreds:{},locked:false,kolocked:false};
+  if(!q.users[name]) q.users[name]={preds:{},kopreds:{},realkopreds:{},locked:false,kolocked:false};
   q.users[name].pin=pin1;
   q.users[name].registeredAt=Date.now();
   S._loginStep=null; S._loginData=null;
@@ -4144,7 +4101,26 @@ window.SAKR=btn=>{
   }
   saveNow();if(btn){btn.textContent='✅ Guardado!';setTimeout(()=>btn.textContent='💾 Guardar Resultados Eliminación',2000);}};
 
-window.SVP=()=>{const v=parseInt(document.getElementById('pinput').value)||0;const q=S.adminQ?getQ(S.adminQ):null;if(q)q.prize=v;save();render();};
+
+    window.SRKO=(id,side,val)=>{
+  const u=curUser();if(!u)return;
+  if(!userCanEditRealKO(id)) return;
+  if(!u.realkopreds)u.realkopreds={};
+  if(!u.realkopreds[id])u.realkopreds[id]={h:'',a:''};
+  u.realkopreds[id][side]=val===''?'':(parseInt(val)>=0?parseInt(val):0);
+  save();
+};
+window.CONFIRM_KO_MATCH=async id=>{
+  const R=getResults();
+  if(!R.koresults) R.koresults={};
+  if(!R.koresults[id]) R.koresults[id]={h:'',a:''};
+  R.koresults[id].confirmed=true;
+  await saveNow();
+  showToast('🔓 Partido confirmado y desbloqueado para usuarios','info',3000);
+  render();
+};
+    
+    window.SVP=()=>{const v=parseInt(document.getElementById('pinput').value)||0;const q=S.adminQ?getQ(S.adminQ):null;if(q)q.prize=v;save();render();};
 window.UU=n=>{if(confirm(`¿Desbloquear grupos de ${n}?`)){const q=S.adminQ?getQ(S.adminQ):null;if(q&&q.users[n]){q.users[n].locked=false;saveNow().then(()=>render());}}};
 window.UUK=n=>{if(confirm(`¿Desbloquear fase eliminatoria de ${n}?`)){const q=S.adminQ?getQ(S.adminQ):null;if(q&&q.users[n]){q.users[n].kolocked=false;saveNow().then(()=>render());}}};
 window.RESET_PIN=(n,qn)=>{
@@ -4213,7 +4189,7 @@ window.DEL=n=>{if(confirm(`¿Eliminar a ${n}?`)){const q=S.adminQ?getQ(S.adminQ)
 window.SHARE_CARD=function(playerName, qName){
   const q=getQ(qName); if(!q) return;
   const u=q.users[playerName]; if(!u) return;
-  const stats=calcStats(u.preds||{},u.kopreds||{});
+  const stats=calcStats(u.preds||{},u.kopreds||{},{realkopreds:u.realkopreds||{}});
   const rank=getRanking(qName);
  const foundRank=rank.find(r=>r.n===playerName);
   const pos=foundRank&&foundRank.rankPos?foundRank.rankPos:rank.findIndex(r=>r.n===playerName)+1;
@@ -4266,7 +4242,7 @@ window.EXPORT_MY_PDF=async function(playerName, qName){
   const realRes=R.results||{};
   const preds=u.preds||{};
   const kopreds=u.kopreds||{};
-  const stats=calcStats(preds,kopreds);
+  const stats=calcStats(preds,kopreds,{realkopreds:u.realkopreds||{}});
   const rank=getRanking(qName);
   const foundRank=rank.find(r=>r.n===playerName);
   const pos=foundRank&&foundRank.rankPos?foundRank.rankPos:rank.findIndex(r=>r.n===playerName)+1;
