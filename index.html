@@ -227,7 +227,9 @@ body.light-mode .alert-w{background:rgba(255,193,7,0.15);color:#6d4c00;}
 /* KNOCKOUT SECTION */
 .ko-round-label{text-align:center;font-size:11px;font-weight:700;color:var(--gold);background:rgba(255,215,0,0.1);border:1px solid rgba(255,215,0,0.3);border-radius:8px;padding:5px 12px;margin:10px 10px 8px;letter-spacing:0.5px;}
 .ko-match.ko-done{border-left:3px solid #2ecc71;}
-.ko-match{background:var(--card2);border-radius:12px;padding:10px;margin:0 10px 8px;border:1px solid var(--border);}
+.ko-match.ko-correct{border-color:rgba(0,200,83,0.55);background:linear-gradient(135deg,rgba(0,200,83,0.14),rgba(255,255,255,0.03));}
+.ko-match.ko-miss{border-color:rgba(220,50,50,0.55);background:linear-gradient(135deg,rgba(220,50,50,0.14),rgba(255,255,255,0.03));}
+  .ko-match{background:var(--card2);border-radius:12px;padding:10px;margin:0 10px 8px;border:1px solid var(--border);}
 .ko-teams{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px;}
 .ko-team{display:flex;flex-direction:column;align-items:center;gap:3px;}
 .ko-flag{font-size:22px;}
@@ -2179,6 +2181,10 @@ function isRealKOConfirmed(id){
   const r=(getResults().koresults||{})[id];
   return !!(r&&r.confirmed);
 }
+  function koTeamsMatch(h1,a1,h2,a2){
+  if(!h1||!a1||!h2||!a2||h1==='?'||a1==='?'||h2==='?'||a2==='?') return false;
+  return (h1===h2&&a1===a2)||(h1===a2&&a1===h2);
+}
 function realKOMatchAvailable(m){
   const t=getActualKOTeams(m);
   return isRealKOConfirmed(m.id)&&t.h&&t.a&&t.h!=='?'&&t.a!=='?';
@@ -2235,7 +2241,13 @@ const roundVisible={'D16':true,'R16':roundHasWinner('D16'),'QF':roundHasWinner('
   const win=phn>=0&&pan>=0?(phn>pan?'h':pan>phn?'a':(kp.penWin||'d')):'';
   const unknown=ht==='?'||at==='?';
   if(koLocked){
-   return `<div class="ko-match mcard" data-ko-match-id="${m.id}"><div class="ko-match-lbl">${m.label} · ${m.d} · ${m.v}</div><div class="ko-teams"><div class="ko-team"><span class="ko-flag">${F(ht)}</span><span class="ko-name ${win==='h'?'winner':''}">${ht}</span></div><div class="ko-score-center"><div style="font-size:11px;color:var(--muted);font-weight:700;">${win==='h'?`Avanza ${ht}`:win==='a'?`Avanza ${at}`:'Ganador por definir'}</div></div><div class="ko-team"><span class="ko-flag">${F(at)}</span><span class="ko-name ${win==='a'?'winner':''}">${at}</span></div></div></div>`;
+   const realAvailable=realKOMatchAvailable(m);
+   const actual=realAvailable?getActualKOTeams(m):null;
+   const correct=actual?koTeamsMatch(ht,at,actual.h,actual.a):false;
+   const evalCls=actual?(correct?'ko-correct':'ko-miss'):'';
+   const evalBadge=actual?`<span class="mcard-result-badge ${correct?'rb-winner':'rb-miss'}">${correct?'✅ +1':'❌ 0'}</span>`:'';
+   const realLine=actual?`<div style="font-size:9px;color:var(--muted);margin-top:3px;">Real: <strong style="color:#fff">${actual.h} vs ${actual.a}</strong></div>`:'';
+   return `<div class="ko-match mcard ${evalCls}" data-ko-match-id="${m.id}"><div class="ko-match-lbl" style="display:flex;justify-content:space-between;align-items:center;gap:6px;"><span>${m.label} · ${m.d} · ${m.v}</span>${evalBadge}</div><div class="ko-teams"><div class="ko-team"><span class="ko-flag">${F(ht)}</span><span class="ko-name ${win==='h'?'winner':''}">${ht}</span></div><div class="ko-score-center"><div style="font-size:11px;color:var(--muted);font-weight:700;">${win==='h'?`Avanza ${ht}`:win==='a'?`Avanza ${at}`:'Ganador por definir'}</div>${realLine}</div><div class="ko-team"><span class="ko-flag">${F(at)}</span><span class="ko-name ${win==='a'?'winner':''}">${at}</span></div></div></div>`;
   }
   const dis=unknown?'disabled':'';
   return `<div class="ko-match mcard" data-ko-match-id="${m.id}"><div class="ko-match-lbl">${m.label} · ${m.d} · ${m.v}</div><div class="ko-teams"><div class="ko-team"><span class="ko-flag">${F(ht)}</span><span class="ko-name ${win==='h'?'winner':''}">${ht}</span></div><div class="ko-score-center"><div class="ko-score-row"><input type="number" class="ko-score-inp" min="0" max="20" value="${ph}" ${dis} oninput="SKO('${m.id}','h',this.value)" inputmode="numeric" pattern="[0-9]*" /><span class="ko-vs">-</span><input type="number" class="ko-score-inp" min="0" max="20" value="${pa}" ${dis} oninput="SKO('${m.id}','a',this.value)" inputmode="numeric" pattern="[0-9]*" /></div><div class="ko-win-btns"><button class="ko-win-btn ${win==='h'?'active':''}" data-win="h" ${dis} onclick="SWKO('${m.id}','h')">${F(ht)}</button><button class="ko-win-btn ${win==='a'?'active':''}" data-win="a" ${dis} onclick="SWKO('${m.id}','a')">${F(at)}</button></div><div class="ko-pen-note">${unknown?'Equipos aún no definidos':'El marcador define quién avanza; no suma puntos por exacto.'}</div></div><div class="ko-team"><span class="ko-flag">${F(at)}</span><span class="ko-name ${win==='a'?'winner':''}">${at}</span></div></div></div>`;
@@ -2249,15 +2261,25 @@ function buildEliminacionReal(){
   return `<div class="alert alert-w" style="margin:10px;">✅ Estos son los cruces reales confirmados. Predice marcador: +1 por ganador y +1 extra por marcador exacto.</div>${['D16','R16','QF','SF','3P','FIN'].map(r=>{const ms=available.filter(m=>m.round===r);return ms.length?`<div class="ko-round-label">${ROUND_LABELS[r]}</div>${ms.map(m=>buildRealKOUserCard(m,realkopreds)).join('')}`:'';}).join('')}`;
 }
 function buildRealKOUserCard(m,realkopreds){
+   const user=curUser();
   const t=getActualKOTeams(m), p=realkopreds[m.id]||{h:'',a:''};
   const rr=(getResults().koresults||{})[m.id];
   const played=rr&&rr.h!==''&&rr.h!==undefined&&rr.a!==''&&rr.a!==undefined;
   const res=played?matchResult(p,rr):'pending';
   const cls=res==='exact'?'exact':res==='winner'?'winner':res==='miss'?'miss':'';
   const badge=played?`<span class="mcard-result-badge ${res==='exact'?'rb-exact':res==='winner'?'rb-winner':'rb-miss'}">${res==='exact'?'✅ +2pts':res==='winner'?'✔ +1pt':'❌ 0pts'}</span>`:'';
-  const dis=(userCanEditRealKO(m.id)&&!played)?'':'disabled';
+  const locked=isUserRealKOLocked(user,m.id);
+  const canEdit=userCanEditRealKO(m.id)&&!played&&!locked;
+  const dis=canEdit?'':'disabled';
   const ph=p.h??'', pa=p.a??'';
-  return `<div class="ko-match mcard ${cls}"><div class="ko-match-lbl" style="display:flex;justify-content:space-between;align-items:center;"><span>${m.label} · ${m.d} · ${m.v}</span>${badge}</div><div class="ko-teams"><div class="ko-team"><span class="ko-flag">${F(t.h)}</span><span class="ko-name">${t.h}</span></div><div class="ko-score-center"><div class="ko-score-row"><input type="number" class="ko-score-inp" min="0" max="20" value="${ph}" ${dis} oninput="SRKO('${m.id}','h',this.value)" inputmode="numeric" pattern="[0-9]*" /><span class="ko-vs">-</span><input type="number" class="ko-score-inp" min="0" max="20" value="${pa}" ${dis} oninput="SRKO('${m.id}','a',this.value)" inputmode="numeric" pattern="[0-9]*" /></div>${played?`<div style="margin-top:4px;font-size:10px;text-align:center;color:var(--muted);">Real: <strong style="color:#fff">${rr.h}-${rr.a}</strong></div>`:`<div class="ko-pen-note">Predicción abierta hasta que se capture el resultado.</div>`}</div><div class="ko-team"><span class="ko-flag">${F(t.a)}</span><span class="ko-name">${t.a}</span></div></div></div>`;
+  const filled=ph!==''&&pa!=='';
+  const lockBtn=!played&&userCanEditRealKO(m.id)
+    ? (locked?`<div class="locked-tag" style="margin-top:5px;">🔒 Resultado bloqueado</div>`:`<button class="btn btn-success btn-sm" style="margin-top:6px;font-size:10px;" ${filled?'':'disabled'} onclick="LOCK_REAL_KO('${m.id}')">🔒 Bloquear resultado</button>`)
+    : '';
+  return `<div class="ko-match mcard ${cls}"><div class="ko-match-lbl" style="display:flex;justify-content:space-between;align-items:center;"><span>${m.label} · ${m.d} · ${m.v}</span>${badge}</div><div class="ko-teams"><div class="ko-team"><span class="ko-flag">${F(t.h)}</span><span class="ko-name">${t.h}</span></div><div class="ko-score-center"><div class="ko-score-row"><input type="number" class="ko-score-inp" min="0" max="20" value="${ph}" ${dis} oninput="SRKO('${m.id}','h',this.value)" inputmode="numeric" pattern="[0-9]*" /><span class="ko-vs">-</span><input type="number" class="ko-score-inp" min="0" max="20" value="${pa}" ${dis} oninput="SRKO('${m.id}','a',this.value)" inputmode="numeric" pattern="[0-9]*" /></div>${played?`<div style="margin-top:4px;font-size:10px;text-align:center;color:var(--muted);">Real: <strong style="color:#fff">${rr.h}-${rr.a}</strong></div>`:`<div class="ko-pen-note">${locked?'Pide al administrador desbloquearlo si necesitas corregir.':'Predicción abierta hasta que se capture el resultado.'}</div>${lockBtn}`}</div><div class="ko-team"><span class="ko-flag">${F(t.a)}</span><span class="ko-name">${t.a}</span></div></div></div>`;
+}
+function isUserRealKOLocked(user,id){
+  return !!(user&&user.realkolocks&&user.realkolocks[id]);
 }
 function userCanEditRealKO(id){
   const r=(getResults().koresults||{})[id];
@@ -3247,7 +3269,7 @@ function buildAdminKOResults(){
               <input type="number" class="ko-score-inp" min="0" max="20" value="${r.a}" oninput="SKR('${m.id}','a',this.value)" inputmode="numeric" pattern="[0-9]*" />
             </div>`:`<span style="font-size:10px;color:var(--muted);">Pendiente</span>`}
             ${hasR?`<span class="mcard-result-badge rb-winner" style="margin-top:3px;">✅ Guardado</span>`:''}
-            ${readyFinal?`<button onclick="CONFIRM_KO_MATCH('${m.id}')" style="margin-top:4px;font-size:9px;padding:2px 7px;border-radius:8px;border:1px solid ${r.confirmed?'rgba(0,200,83,0.45)':'rgba(255,215,0,0.3)'};background:${r.confirmed?'rgba(0,200,83,0.12)':'rgba(255,215,0,0.08)'};color:${r.confirmed?'#69ff6e':'var(--gold)'};cursor:pointer;">${r.confirmed?'✅ Partido confirmado':'🔓 Confirmar partido'}</button>`:''}
+             ${readyFinal?`<button onclick="CONFIRM_KO_MATCH('${m.id}')" style="margin-top:4px;font-size:9px;padding:2px 7px;border-radius:8px;border:1px solid ${r.confirmed?'rgba(0,200,83,0.45)':'rgba(255,215,0,0.3)'};background:${r.confirmed?'rgba(0,200,83,0.12)':'rgba(255,215,0,0.08)'};color:${r.confirmed?'#69ff6e':'var(--gold)'};cursor:pointer;">${r.confirmed?'✅ Partido confirmado':'🔓 Confirmar partido'}</button>${r.confirmed&&!S.isCoadmin?`<button onclick="ADMIN_UNLOCK_REAL_KO('${m.id}')" style="margin-top:4px;font-size:9px;padding:2px 7px;border-radius:8px;border:1px solid rgba(100,150,255,0.4);background:rgba(100,150,255,0.12);color:#7aadff;cursor:pointer;">🔓 Desbloquear usuario</button>`:''}`:''}
             ${S.isCoadmin?'':
             `<button onclick="OPEN_OVERRIDE('${m.id}','${dispH||''}','${dispA||''}')"
               style="margin-top:4px;font-size:9px;padding:2px 7px;border-radius:8px;border:1px solid rgba(255,215,0,0.3);background:rgba(255,215,0,0.08);color:var(--gold);cursor:pointer;">
@@ -4104,11 +4126,21 @@ window.SAKR=btn=>{
 
     window.SRKO=(id,side,val)=>{
   const u=curUser();if(!u)return;
-  if(!userCanEditRealKO(id)) return;
+  if(!userCanEditRealKO(id)||isUserRealKOLocked(u,id)) return;
   if(!u.realkopreds)u.realkopreds={};
   if(!u.realkopreds[id])u.realkopreds[id]={h:'',a:''};
   u.realkopreds[id][side]=val===''?'':(parseInt(val)>=0?parseInt(val):0);
   save();
+};
+  window.LOCK_REAL_KO=async id=>{
+  const u=curUser(); if(!u||!userCanEditRealKO(id)) return;
+  const p=(u.realkopreds||{})[id];
+  if(!p||p.h===''||p.h===undefined||p.a===''||p.a===undefined){alert('Captura el marcador antes de bloquearlo.');return;}
+  if(!confirm('¿Bloquear este resultado? Solo el administrador podrá desbloquearlo.')) return;
+  if(!u.realkolocks) u.realkolocks={};
+  u.realkolocks[id]=true;
+  await saveNow();
+  render();
 };
 window.CONFIRM_KO_MATCH=async id=>{
   const R=getResults();
@@ -4123,7 +4155,19 @@ window.CONFIRM_KO_MATCH=async id=>{
     window.SVP=()=>{const v=parseInt(document.getElementById('pinput').value)||0;const q=S.adminQ?getQ(S.adminQ):null;if(q)q.prize=v;save();render();};
 window.UU=n=>{if(confirm(`¿Desbloquear grupos de ${n}?`)){const q=S.adminQ?getQ(S.adminQ):null;if(q&&q.users[n]){q.users[n].locked=false;saveNow().then(()=>render());}}};
 window.UUK=n=>{if(confirm(`¿Desbloquear fase eliminatoria de ${n}?`)){const q=S.adminQ?getQ(S.adminQ):null;if(q&&q.users[n]){q.users[n].kolocked=false;saveNow().then(()=>render());}}};
-window.RESET_PIN=(n,qn)=>{
+window.ADMIN_UNLOCK_REAL_KO=async id=>{
+  const q=S.adminQ?getQ(S.adminQ):null;
+  if(!q||!q.users){alert('Selecciona una quiniela primero.');return;}
+  const names=Object.entries(q.users).filter(([,u])=>u.realkolocks&&u.realkolocks[id]).map(([n])=>n);
+  if(!names.length){alert('No hay usuarios con este partido bloqueado en esta quiniela.');return;}
+  const n=prompt('Usuario a desbloquear para este partido:\n'+names.join(', '));
+  if(!n||!q.users[n]||!q.users[n].realkolocks||!q.users[n].realkolocks[id]) return;
+  delete q.users[n].realkolocks[id];
+  await saveNow();
+  showToast('🔓 Partido desbloqueado para '+n,'info',2500);
+  render();
+};
+  window.RESET_PIN=(n,qn)=>{
   if(!confirm('¿Resetear el PIN de '+n+'? La próxima vez que entre tendrá que crear uno nuevo.')) return;
   const q=getQ(qn);
   if(q&&q.users[n]){
