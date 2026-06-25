@@ -1757,15 +1757,17 @@ function buildBracket(){
   function renderBracket(useReal){
     const gp=useReal?realRes:preds;
     const kp=useReal?realKO:kopreds;
-    if(useReal&&!Object.values(realKO).some(r=>r&&r.h!==''))
-      return `<div style="padding:24px;text-align:center;color:var(--muted);font-size:12px;">⏳ Sin resultados reales de eliminación aún</div>`;
+    if(useReal&&!Object.values(realKO).some(r=>r&&r.confirmed))
+      return `<div style="padding:24px;text-align:center;color:var(--muted);font-size:12px;">⏳ Sin partidos reales confirmados aún</div>`;
 
+    function realConfirmedFor(mid){ const r=realKO[mid]; return !useReal||!!(r&&r.confirmed); }
     function tm(pos){ const v=resolveKOTeam(pos,gp,kp); return v&&v!=='?'?v:null; }
-    function sc(mid){ const r=kp[mid]; return (r&&r.h!=='')?r.h+'-'+r.a:null; }
+   function sc(mid){ const r=kp[mid]; return (r&&r.h!==''&&realConfirmedFor(mid))?r.h+'-'+r.a:null; }
 
     // Card sizes: sm=small(D16), md=medium(R16/QF), lg=large(SF/FIN)
     function card(mid, size='sm'){
       const m=KO_MATCHES.find(x=>x.id===mid); if(!m) return '<div style="width:10px"></div>';
+      if(useReal&&!realConfirmedFor(mid)) return '<div style="width:104px;flex-shrink:0;padding:8px;border:1px dashed rgba(255,255,255,0.12);border-radius:8px;color:var(--muted);font-size:8px;text-align:center;">Pendiente de confirmar</div>';
       const score=sc(mid);
       const rh=score!=null?parseInt(score.split('-')[0]):null;
       const ra=score!=null?parseInt(score.split('-')[1]):null;
@@ -3609,6 +3611,30 @@ window.VIEW_PROFILE=function(playerName, qName){
     </tr>`;
   }).join('');
 
+  
+  const realKORows=KO_MATCHES.filter(realKOMatchAvailable).map(m=>{
+    const real=realKO[m.id];
+    const hasReal=real&&real.h!==''&&real.h!==undefined;
+    const teams=getActualKOTeams(m);
+    const pred=(u.realkopreds||{})[m.id];
+    const predTxt=pred&&pred.h!==''?`${pred.h}-${pred.a}`:'—';
+    const realTxt=hasReal?`${real.h}-${real.a}`:(real&&real.confirmed?'Confirmado':'—');
+    let ptsBadge='';
+    if(hasReal&&pred&&pred.h!==''){
+      const r=matchResult(pred,real);
+      ptsBadge=r==='exact'?'<span class="mcard-result-badge rb-exact">+2</span>':r==='winner'?'<span class="mcard-result-badge rb-winner">+1</span>':'<span class="mcard-result-badge rb-miss">0</span>';
+    }
+    const rowBg=ptsBadge.includes('rb-exact')?'rgba(0,200,83,0.08)':ptsBadge.includes('rb-winner')?'rgba(255,215,0,0.06)':ptsBadge.includes('rb-miss')?'rgba(220,50,50,0.07)':'';
+    return `<tr style="background:${rowBg};border-bottom:1px solid rgba(255,255,255,0.04);">
+      <td style="padding:5px 6px;font-size:10px;color:var(--muted);">${m.label}</td>
+      <td style="padding:5px 6px;font-size:10px;">${F(teams.h)} ${(teams.h||'').slice(0,8)}</td>
+      <td style="padding:5px 6px;font-size:10px;">${F(teams.a)} ${(teams.a||'').slice(0,8)}</td>
+      <td style="padding:5px 6px;font-size:11px;font-weight:700;text-align:center;">${predTxt}</td>
+      <td style="padding:5px 6px;font-size:11px;text-align:center;color:var(--muted);">${realTxt}</td>
+      <td style="padding:5px 6px;text-align:center;">${ptsBadge}</td>
+    </tr>`;
+  }).join('');
+
   const thead=`<thead><tr style="border-bottom:1px solid rgba(255,255,255,0.1);">
     <th style="padding:5px 6px;font-size:9px;color:var(--muted);">Partido</th>
     <th style="padding:5px 6px;font-size:9px;color:var(--muted);">Local</th>
@@ -3660,17 +3686,20 @@ window.VIEW_PROFILE=function(playerName, qName){
           <div style="font-size:9px;color:var(--muted);">${u.locked?'Bloqueado':'En progreso'}</div>
         </div>
       </div>
-      <div style="overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;min-width:340px;">
-          ${thead}<tbody>${groupRows}</tbody>
-        </table>
+      <div style="display:flex;border-bottom:1px solid rgba(255,255,255,0.08);">
+        <button data-prof-tab-btn="groups" onclick="PROFILE_TAB('groups')" style="flex:1;padding:10px 4px;border:none;background:var(--gold);color:#000;font-size:11px;font-weight:800;cursor:pointer;">Grupos</button>
+        <button data-prof-tab-btn="ko" onclick="PROFILE_TAB('ko')" style="flex:1;padding:10px 4px;border:none;background:rgba(255,255,255,0.05);color:var(--muted);font-size:11px;font-weight:800;cursor:pointer;">Cruces predichos</button>
+        <button data-prof-tab-btn="realko" onclick="PROFILE_TAB('realko')" style="flex:1;padding:10px 4px;border:none;background:rgba(255,255,255,0.05);color:var(--muted);font-size:11px;font-weight:800;cursor:pointer;">Partidos reales</button>
       </div>
-      ${u.locked?`<div style="overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;min-width:340px;">
-          <thead><tr><td colspan="6" style="padding:8px 6px 4px;font-size:10px;font-weight:800;color:var(--gold);background:rgba(255,215,0,0.05);">🏆 Fase Eliminatoria</td></tr>${thead.replace('<thead>','').replace('</thead>','')}</thead>
-          <tbody>${koRows}</tbody>
-        </table>
-      </div>`:'<div style="padding:12px;font-size:11px;color:var(--muted);text-align:center;">⏳ Fase eliminatoria aún no bloqueada</div>'}
+      <div data-prof-tab="groups" style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;min-width:340px;">${thead}<tbody>${groupRows}</tbody></table>
+      </div>
+      <div data-prof-tab="ko" style="display:none;overflow-x:auto;">
+        ${u.locked?`<table style="width:100%;border-collapse:collapse;min-width:340px;"><thead><tr><td colspan="6" style="padding:8px 6px 4px;font-size:10px;font-weight:800;color:var(--gold);background:rgba(255,215,0,0.05);">🏆 Predicción de cruces (solo importa el partido, no el marcador)</td></tr>${thead.replace('<thead>','').replace('</thead>','')}</thead><tbody>${koRows}</tbody></table>`:'<div style="padding:12px;font-size:11px;color:var(--muted);text-align:center;">⏳ Fase eliminatoria aún no bloqueada</div>'}
+      </div>
+      <div data-prof-tab="realko" style="display:none;overflow-x:auto;">
+        ${realKORows?`<table style="width:100%;border-collapse:collapse;min-width:340px;"><thead><tr><td colspan="6" style="padding:8px 6px 4px;font-size:10px;font-weight:800;color:var(--gold);background:rgba(255,215,0,0.05);">✅ Predicciones de partidos reales confirmados</td></tr>${thead.replace('<thead>','').replace('</thead>','')}</thead><tbody>${realKORows}</tbody></table>`:'<div style="padding:12px;font-size:11px;color:var(--muted);text-align:center;">⏳ Los partidos reales aparecerán conforme el admin los confirme.</div>'}
+      </div>
       <div data-profile-footer style="padding:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
         <button onclick="SHARE_CARD('${playerName}','${qName}')" class="btn btn-primary" style="flex:1;">📤 Compartir</button>
         <button onclick="EXPORT_MY_PDF('${playerName}','${qName}')" class="btn btn-secondary" style="flex:1;">📄 PDF</button>
@@ -3680,6 +3709,12 @@ window.VIEW_PROFILE=function(playerName, qName){
   document.body.appendChild(modal);
 };
 
+  window.PROFILE_TAB=tab=>{
+  const modal=document.getElementById('profile-modal'); if(!modal) return;
+  modal.querySelectorAll('[data-prof-tab]').forEach(el=>{el.style.display=el.getAttribute('data-prof-tab')===tab?'block':'none';});
+  modal.querySelectorAll('[data-prof-tab-btn]').forEach(btn=>{const on=btn.getAttribute('data-prof-tab-btn')===tab;btn.style.background=on?'var(--gold)':'rgba(255,255,255,0.05)';btn.style.color=on?'#000':'var(--muted)';});
+};
+  
 // ===================== THEME TOGGLE =====================
 window.TOGGLE_THEME=()=>{
   document.body.classList.toggle('light-mode');
@@ -4160,11 +4195,36 @@ window.ADMIN_UNLOCK_REAL_KO=async id=>{
   if(!q||!q.users){alert('Selecciona una quiniela primero.');return;}
   const names=Object.entries(q.users).filter(([,u])=>u.realkolocks&&u.realkolocks[id]).map(([n])=>n);
   if(!names.length){alert('No hay usuarios con este partido bloqueado en esta quiniela.');return;}
-  const n=prompt('Usuario a desbloquear para este partido:\n'+names.join(', '));
-  if(!n||!q.users[n]||!q.users[n].realkolocks||!q.users[n].realkolocks[id]) return;
-  delete q.users[n].realkolocks[id];
+  const existing=document.getElementById('unlock-real-ko-modal');
+  if(existing) existing.remove();
+  const match=KO_MATCHES.find(m=>m.id===id);
+  const modal=document.createElement('div');
+  modal.id='unlock-real-ko-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:10000;display:flex;align-items:center;justify-content:center;padding:14px;';
+  modal.innerHTML=`<div style="width:100%;max-width:420px;background:#0d0d30;border:1px solid rgba(100,150,255,0.45);border-radius:16px;overflow:hidden;">
+    <div style="padding:14px;background:linear-gradient(135deg,#162a5e,#0a143a);display:flex;justify-content:space-between;gap:10px;align-items:center;">
+      <div><div style="font-size:15px;font-weight:800;color:#7aadff;">🔓 Desbloquear partido</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">${match?match.label:id} · elige uno o varios usuarios</div></div>
+      <button onclick="document.getElementById('unlock-real-ko-modal').remove()" style="background:rgba(255,255,255,0.1);border:none;color:#fff;border-radius:50%;width:30px;height:30px;cursor:pointer;">✕</button>
+    </div>
+    <div style="padding:12px;max-height:55vh;overflow:auto;">
+      ${names.map((n,i)=>`<label style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid rgba(255,255,255,0.08);border-radius:10px;margin-bottom:8px;background:rgba(255,255,255,0.04);font-size:13px;cursor:pointer;"><input type="checkbox" data-unlock-user value="${encodeURIComponent(n)}" ${i===0?'checked':''} style="width:18px;height:18px;"><span>${F(n)} ${n}</span></label>`).join('')}
+    </div>
+    <div style="padding:12px;display:flex;gap:8px;border-top:1px solid rgba(255,255,255,0.08);">
+      <button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById('unlock-real-ko-modal').remove()">Cancelar</button>
+      <button class="btn btn-primary" style="flex:1;" onclick="CONFIRM_UNLOCK_REAL_KO('${id}')">Desbloquear</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+};
+window.CONFIRM_UNLOCK_REAL_KO=async id=>{
+  const q=S.adminQ?getQ(S.adminQ):null; if(!q||!q.users) return;
+  const modal=document.getElementById('unlock-real-ko-modal'); if(!modal) return;
+  const selected=[...modal.querySelectorAll('[data-unlock-user]:checked')].map(x=>decodeURIComponent(x.value));
+  if(!selected.length){alert('Selecciona al menos un usuario.');return;}
+  selected.forEach(n=>{ if(q.users[n]&&q.users[n].realkolocks) delete q.users[n].realkolocks[id]; });
   await saveNow();
-  showToast('🔓 Partido desbloqueado para '+n,'info',2500);
+ modal.remove();
+  showToast('🔓 Partido desbloqueado para '+selected.join(', '),'info',3000);
   render();
 };
   window.RESET_PIN=(n,qn)=>{
