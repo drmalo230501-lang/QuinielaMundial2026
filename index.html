@@ -2285,8 +2285,8 @@ function buildRealKOUserCard(m,realkopreds){
   const ph=p.h??'', pa=p.a??'';
   const filled=ph!==''&&pa!=='';
   const lockBtn=!played&&userCanEditRealKO(m.id)
-    ? (locked?`<div class="locked-tag" style="margin-top:5px;">🔒 Resultado bloqueado</div>`:`<button class="btn btn-success btn-sm" style="margin-top:6px;font-size:10px;" ${filled?'':'disabled'} onclick="LOCK_REAL_KO('${m.id}')">🔒 Bloquear resultado</button>`)
-    : '';
+    ? (locked?`<div class="locked-tag" style="margin-top:5px;">🔒 Resultado bloqueado</div>`:`<button id="real-ko-lock-${m.id}" class="btn btn-success btn-sm" style="margin-top:6px;font-size:10px;" ${filled?'':'disabled'} onclick="LOCK_REAL_KO('${m.id}')">🔒 Bloquear resultado</button>`)
+  : '';
   return `<div class="ko-match mcard ${cls}"><div class="ko-match-lbl" style="display:flex;justify-content:space-between;align-items:center;"><span>${m.label} · ${m.d} · ${m.t||''} · ${m.v}</span>${badge}</div><div class="ko-teams"><div class="ko-team"><span class="ko-flag">${F(t.h)}</span><span class="ko-name">${t.h}</span></div><div class="ko-score-center"><div class="ko-score-row"><input type="number" class="ko-score-inp" min="0" max="20" value="${ph}" ${dis} oninput="SRKO('${m.id}','h',this.value)" inputmode="numeric" pattern="[0-9]*" /><span class="ko-vs">-</span><input type="number" class="ko-score-inp" min="0" max="20" value="${pa}" ${dis} oninput="SRKO('${m.id}','a',this.value)" inputmode="numeric" pattern="[0-9]*" /></div>${played?`<div style="margin-top:4px;font-size:10px;text-align:center;color:var(--muted);">Real: <strong style="color:#fff">${rr.h}-${rr.a}</strong></div>`:`<div class="ko-pen-note">${locked?'Pide al administrador desbloquearlo si necesitas corregir.':'Predicción abierta hasta que se capture el resultado.'}</div>${lockBtn}`}</div><div class="ko-team"><span class="ko-flag">${F(t.a)}</span><span class="ko-name">${t.a}</span></div></div></div>`;
 }
 function isUserRealKOLocked(user,id){
@@ -4168,13 +4168,23 @@ window.SAKR=btn=>{
   saveNow();if(btn){btn.textContent='✅ Guardado!';setTimeout(()=>btn.textContent='💾 Guardar Resultados Eliminación',2000);}};
 
 
+  function updateRealKOLockButton(id){
+  const u=curUser();
+  const btn=document.getElementById('real-ko-lock-'+id);
+  if(!u||!btn) return;
+  const p=(u.realkopreds||{})[id];
+  const filled=!!(p&&p.h!==''&&p.h!==undefined&&p.a!==''&&p.a!==undefined);
+  btn.disabled=!filled;
+}
+
     window.SRKO=(id,side,val)=>{
   const u=curUser();if(!u)return;
   if(!userCanEditRealKO(id)||isUserRealKOLocked(u,id)) return;
   if(!u.realkopreds)u.realkopreds={};
   if(!u.realkopreds[id])u.realkopreds[id]={h:'',a:''};
   u.realkopreds[id][side]=val===''?'':(parseInt(val)>=0?parseInt(val):0);
-  save();
+    updateRealKOLockButton(id);
+      save();
 };
   window.LOCK_REAL_KO=async id=>{
   const u=curUser(); if(!u||!userCanEditRealKO(id)) return;
