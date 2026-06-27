@@ -168,7 +168,8 @@ body.light-mode .alert-w{background:rgba(255,193,7,0.15);color:#6d4c00;}
 .bs-g{background:rgba(0,200,83,0.2);color:#69ff6e;}
 .bs-y{background:rgba(255,215,0,0.2);color:var(--gold);}
   .bs-ok{background:rgba(255,255,255,0.14);color:rgba(255,255,255,0.82);border:1px solid rgba(255,255,255,0.16);}
-.bs-r{background:rgba(220,50,50,0.2);color:#ff8a8a;}
+.bs-stadium{background:rgba(26,110,245,0.24);color:#7aadff;border:1px solid rgba(122,173,255,0.45);}
+  .bs-r{background:rgba(220,50,50,0.2);color:#ff8a8a;}
 
   
 /* RANKING SHARE */
@@ -1383,8 +1384,8 @@ function resolveKOTeam(pos, preds, koPreds){
     const at=resolveKOTeam(km.aPos,preds,koPreds);
     if(rh>ra) return ht;
     if(ra>rh) return at;
-    // Draw — use penWin if set
-    return kr.penWin==='h'?ht:kr.penWin==='a'?at:'?';
+    // Draw — use either projected pen winner or captured penalty score.
+    return kr.penWin==='h'||scoreSideWinner(kr)==='h'?ht:kr.penWin==='a'||scoreSideWinner(kr)==='a'?at:'?';
   }
   const mPierde=pos.match(/^Pierde P(\d+)$/);
   if(mPierde){
@@ -1398,23 +1399,49 @@ function resolveKOTeam(pos, preds, koPreds){
     const ht=resolveKOTeam(km.hPos,preds,koPreds);
     const at=resolveKOTeam(km.aPos,preds,koPreds);
     if(rh>ra) return at;
-    if(ra>rh) return ht;
+    return kr.penWin==='h'||scoreSideWinner(kr)==='h'?at:kr.penWin==='a'||scoreSideWinner(kr)==='a'?ht:'?';
     return kr.penWin==='h'?at:kr.penWin==='a'?ht:'?';
   }
   return pos;
 }
 
 // ===================== SCORING =====================
-function matchResult(pred,real){
+function scoreSideWinner(item){
+  if(!item||item.h===''||item.h===undefined||item.a===''||item.a===undefined) return '';
+  const h=parseInt(item.h),a=parseInt(item.a);
+  if(isNaN(h)||isNaN(a)) return '';
+  if(h>a) return 'h';
+  if(a>h) return 'a';
+  if(item.pen){
+    const ph=parseInt(item.ph),pa=parseInt(item.pa);
+    if(isNaN(ph)||isNaN(pa)||ph===pa) return '';
+    return ph>pa?'h':'a';
+  }
+  return 'd';
+}
+function hasPenaltyScore(item){
+  return !!(item&&item.pen&&item.ph!==''&&item.ph!==undefined&&item.pa!==''&&item.pa!==undefined&&!isNaN(parseInt(item.ph))&&!isNaN(parseInt(item.pa))&&parseInt(item.ph)!==parseInt(item.pa));
+}
+function penaltyText(item){
+  return hasPenaltyScore(item)?` (Pen. ${item.ph}-${item.pa})`:'';
+}
+  function matchResult(pred,real){
   if(!real||real.h===''||real.h===undefined||real.a===''||real.a===undefined) return 'pending';
   const rh=parseInt(real.h),ra=parseInt(real.a);
   if(isNaN(rh)||isNaN(ra)) return 'pending';
   if(!pred||pred.h===''||pred.h===undefined) return 'pending';
   const ph=parseInt(pred.h)||0,pa=parseInt(pred.a)||0;
-  const rw=rh>ra?'h':ra>rh?'a':'d',pw=ph>pa?'h':pa>ph?'a':'d';
-  if(rw!==pw) return 'miss';
-  if(rh===ph&&ra===pa) return 'exact';
-  return 'winner';
+ const rw=scoreSideWinner(real),pw=scoreSideWinner(pred);
+  if(!rw||!pw) return 'pending';
+    if(rw!==pw) return 'miss';
+if(rh===ph&&ra===pa){
+    if(!!real.pen||!!pred.pen){
+      if(!hasPenaltyScore(real)||!hasPenaltyScore(pred)) return 'winner';
+      return parseInt(real.ph)===parseInt(pred.ph)&&parseInt(real.pa)===parseInt(pred.pa)?'exact':'winner';
+    }
+    return 'exact';
+  }
+    return 'winner';
 }
 // ── Achievements ────────────────────────────────────────────────────────────
 function getAchievements(preds, kopreds){
@@ -1443,8 +1470,8 @@ function getAchievements(preds, kopreds){
 function calcStats(preds, kopreds, opts={}){  const R=getResults();
   const realRes=R.results||{};
   const realKO=R.koresults||{};
-  let total=0,exact=0,winner=0,miss=0,played=0,realKOCorrect=0; 
-  // Groups keep original scoring: +2 exact, +1 winner.
+  let total=0,exact=0,winner=0,miss=0,played=0,realKOCorrect=0;
+    // Groups keep original scoring: +2 exact, +1 winner.
   for(const m of ALL){
      if(opts.excludeType==='group'&&opts.excludeId===m.id) continue;
     const res=matchResult(preds[m.id],realRes[m.id]);
@@ -2283,11 +2310,19 @@ function buildRealKOUserCard(m,realkopreds){
   const canEdit=userCanEditRealKO(m.id)&&!played&&!locked;
   const dis=canEdit?'':'disabled';
   const ph=p.h??'', pa=p.a??'';
+  const pens=!!p.pen, pph=p.ph??'', ppa=p.pa??'';
   const filled=ph!==''&&pa!=='';
   const lockBtn=!played&&userCanEditRealKO(m.id)
     ? (locked?`<div class="locked-tag" style="margin-top:5px;">🔒 Resultado bloqueado</div>`:`<button id="real-ko-lock-${m.id}" class="btn btn-success btn-sm" style="margin-top:6px;font-size:10px;" ${filled?'':'disabled'} onclick="LOCK_REAL_KO('${m.id}')">🔒 Bloquear resultado</button>`)
   : '';
-  return `<div class="ko-match mcard ${cls}"><div class="ko-match-lbl" style="display:flex;justify-content:space-between;align-items:center;"><span>${m.label} · ${m.d} · ${m.t||''} · ${m.v}</span>${badge}</div><div class="ko-teams"><div class="ko-team"><span class="ko-flag">${F(t.h)}</span><span class="ko-name">${t.h}</span></div><div class="ko-score-center"><div class="ko-score-row"><input type="number" class="ko-score-inp" min="0" max="20" value="${ph}" ${dis} oninput="SRKO('${m.id}','h',this.value)" inputmode="numeric" pattern="[0-9]*" /><span class="ko-vs">-</span><input type="number" class="ko-score-inp" min="0" max="20" value="${pa}" ${dis} oninput="SRKO('${m.id}','a',this.value)" inputmode="numeric" pattern="[0-9]*" /></div>${played?`<div style="margin-top:4px;font-size:10px;text-align:center;color:var(--muted);">Real: <strong style="color:#fff">${rr.h}-${rr.a}</strong></div>`:`<div class="ko-pen-note">${locked?'Pide al administrador desbloquearlo si necesitas corregir.':'Predicción abierta hasta que se capture el resultado.'}</div>${lockBtn}`}</div><div class="ko-team"><span class="ko-flag">${F(t.a)}</span><span class="ko-name">${t.a}</span></div></div></div>`;
+ const penaltyBox=`<div style="margin-top:6px;padding:6px;border:1px solid rgba(122,173,255,0.28);border-radius:9px;background:rgba(26,110,245,0.08);">
+    <label style="display:flex;align-items:center;justify-content:center;gap:6px;font-size:10px;color:#7aadff;font-weight:800;cursor:pointer;">
+      <input type="checkbox" ${pens?'checked':''} ${dis} onchange="TRKO_PEN('${m.id}',this.checked)" style="width:15px;height:15px;"> ¿Crees que llegará a penales?
+    </label>
+    <div style="font-size:9px;color:var(--muted);line-height:1.3;margin-top:4px;text-align:center;">Activa esta opción solo si crees que el partido terminará empatado y se definirá en penales; captura también el marcador de penales.</div>
+    ${pens?`<div class="ko-score-row" style="margin-top:6px;justify-content:center;"><input type="number" class="ko-score-inp" style="width:34px;height:30px;font-size:13px;" min="0" max="20" value="${pph}" ${dis} oninput="SRKO_PEN('${m.id}','ph',this.value)" inputmode="numeric" pattern="[0-9]*" /><span class="ko-vs">pen</span><input type="number" class="ko-score-inp" style="width:34px;height:30px;font-size:13px;" min="0" max="20" value="${ppa}" ${dis} oninput="SRKO_PEN('${m.id}','pa',this.value)" inputmode="numeric" pattern="[0-9]*" /></div>`:''}
+  </div>`;
+  return `<div class="ko-match mcard ${cls}"><div class="ko-match-lbl" style="display:flex;justify-content:space-between;align-items:center;"><span>${m.label} · ${m.d} · ${m.t||''} · ${m.v}</span>${badge}</div><div class="ko-teams"><div class="ko-team"><span class="ko-flag">${F(t.h)}</span><span class="ko-name">${t.h}</span></div><div class="ko-score-center"><div class="ko-score-row"><input type="number" class="ko-score-inp" min="0" max="20" value="${ph}" ${dis} oninput="SRKO('${m.id}','h',this.value)" inputmode="numeric" pattern="[0-9]*" /><span class="ko-vs">-</span><input type="number" class="ko-score-inp" min="0" max="20" value="${pa}" ${dis} oninput="SRKO('${m.id}','a',this.value)" inputmode="numeric" pattern="[0-9]*" /></div>${played?`<div style="margin-top:4px;font-size:10px;text-align:center;color:var(--muted);">Real: <strong style="color:#fff">${rr.h}-${rr.a}${penaltyText(rr)}</strong></div>`:`${penaltyBox}<div class="ko-pen-note">${locked?'Pide al administrador desbloquearlo si necesitas corregir.':'Predicción abierta hasta que se capture el resultado.'}</div>${lockBtn}`}</div><div class="ko-team"><span class="ko-flag">${F(t.a)}</span><span class="ko-name">${t.a}</span></div></div></div>`;
 }
 function isUserRealKOLocked(user,id){
   return !!(user&&user.realkolocks&&user.realkolocks[id]);
@@ -2933,8 +2968,8 @@ function buildRanking(){
         <td class="pts-big">${isLocked?u.total:'—'}</td>
         <td><span class="bs bs-g">${isLocked?u.exact:'—'}</span></td>
        <td><span class="bs bs-ok">${isLocked?u.correct:'—'}</span></td>
-         <td><span class="bs bs-ok">${isLocked?u.realKOCorrect:'—'}</span></td>       
-        <td><span class="bs bs-r">${isLocked?u.miss:'—'}</span></td>
+         <td><span class="bs bs-stadium">${isLocked?u.realKOCorrect:'—'}</span></td>
+         <td><span class="bs bs-r">${isLocked?u.miss:'—'}</span></td>
          <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>
        ${getCurrentMatchItems().map(item=>{ const p=getUserPickForCurrent((getQ(qName)||{}).users?.[u.n],item); return `<td>${p?`<span class="current-pick">${p}</span>`:`<span class="current-pick missing">—</span>`}</td>`; }).join('')}
         <td style="font-size:11px;">${(()=>{
@@ -2997,7 +3032,7 @@ function buildPublicRankingCard(qName){
 <td><strong style="cursor:pointer;text-decoration:underline dotted;color:var(--gold);" onclick="VIEW_PROFILE('${u.n}','${qName}')">${u.n}</strong>${isLocked?rankingMoveHtml(u):'<span style="font-size:9px;color:var(--muted);margin-left:3px;">✏️</span>'}</td>              <td class="pts-big">${isLocked?u.total:'—'}</td>
               <td><span class="bs bs-g">${isLocked?u.exact:'—'}</span></td>
                <td><span class="bs bs-ok">${isLocked?u.correct:'—'}</span></td>
-              <td><span class="bs bs-ok">${isLocked?u.realKOCorrect:'—'}</span></td>      
+              <td><span class="bs bs-stadium">${isLocked?u.realKOCorrect:'—'}</span></td>
               <td><span class="bs bs-r">${isLocked?u.miss:'—'}</span></td>
               <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>
             ${getCurrentMatchItems().map(item=>{ const p=getUserPickForCurrent((getQ(qName)||{}).users?.[u.n],item); return `<td>${p?`<span class="current-pick">${p}</span>`:`<span class="current-pick missing">—</span>`}</td>`; }).join('')}
@@ -3261,6 +3296,7 @@ function buildAdminKOResults(){
     ${ms.map(m=>{
       const r=realKO[m.id]||{h:'',a:''};
       const hasR=r.h!==''&&r.h!==undefined;
+           const pens=!!r.pen, rph=r.ph??'', rpa=r.pa??'';
       const teamH=resolveReal(m.hPos);
       const teamA=resolveReal(m.aPos);
       const ready=teamH!=='?'&&teamA!=='?';
@@ -3283,6 +3319,13 @@ function buildAdminKOResults(){
               <input type="number" class="ko-score-inp" min="0" max="20" value="${r.h}" oninput="SKR('${m.id}','h',this.value)" inputmode="numeric" pattern="[0-9]*" />
               <span class="ko-vs">-</span>
               <input type="number" class="ko-score-inp" min="0" max="20" value="${r.a}" oninput="SKR('${m.id}','a',this.value)" inputmode="numeric" pattern="[0-9]*" />
+           </div>
+            <div style="margin-top:6px;padding:6px;border:1px solid rgba(122,173,255,0.28);border-radius:9px;background:rgba(26,110,245,0.08);">
+              <label style="display:flex;align-items:center;justify-content:center;gap:6px;font-size:10px;color:#7aadff;font-weight:800;cursor:pointer;">
+                <input type="checkbox" ${pens?'checked':''} onchange="TAKR_PEN('${m.id}',this.checked)" style="width:15px;height:15px;"> Se definió en penales
+              </label>
+              <div style="font-size:9px;color:var(--muted);line-height:1.3;margin-top:4px;text-align:center;">Actívalo si el resultado real terminó empatado y el pase se decidió en penales; captura el marcador de penales para compararlo con los usuarios.</div>
+              ${pens?`<div class="ko-score-row" style="margin-top:6px;justify-content:center;"><input type="number" class="ko-score-inp" style="width:34px;height:30px;font-size:13px;" min="0" max="20" value="${rph}" oninput="SKR_PEN('${m.id}','ph',this.value)" inputmode="numeric" pattern="[0-9]*" /><span class="ko-vs">pen</span><input type="number" class="ko-score-inp" style="width:34px;height:30px;font-size:13px;" min="0" max="20" value="${rpa}" oninput="SKR_PEN('${m.id}','pa',this.value)" inputmode="numeric" pattern="[0-9]*" /></div>`:''}
             </div>`:`<span style="font-size:10px;color:var(--muted);">Pendiente</span>`}
             ${hasR?`<span class="mcard-result-badge rb-winner" style="margin-top:3px;">✅ Guardado</span>`:''}
              ${readyFinal?`<button onclick="CONFIRM_KO_MATCH('${m.id}')" style="margin-top:4px;font-size:9px;padding:2px 7px;border-radius:8px;border:1px solid ${r.confirmed?'rgba(0,200,83,0.45)':'rgba(255,215,0,0.3)'};background:${r.confirmed?'rgba(0,200,83,0.12)':'rgba(255,215,0,0.08)'};color:${r.confirmed?'#69ff6e':'var(--gold)'};cursor:pointer;">${r.confirmed?'✅ Partido confirmado':'🔓 Confirmar partido'}</button>${r.confirmed&&!S.isCoadmin?`<button onclick="ADMIN_UNLOCK_REAL_KO('${m.id}')" style="margin-top:4px;font-size:9px;padding:2px 7px;border-radius:8px;border:1px solid rgba(100,150,255,0.4);background:rgba(100,150,255,0.12);color:#7aadff;cursor:pointer;">🔓 Desbloquear usuario</button>`:''}`:''}
@@ -3324,8 +3367,11 @@ function buildAdminQSelector(activeTab){
     return `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
         <div style="font-size:12px;font-weight:700;color:var(--gold);">👥 Participantes (${us.length})</div>
-        <button class="btn btn-primary btn-sm" onclick="EXPORT_EXCEL('${qn}')">📥 Excel</button>
-      </div>
+       <div style="display:flex;gap:6px;">
+          <button class="btn btn-secondary btn-sm" onclick="UUK_REAL_ALL_USERS('${qn}')" title="Desbloquear todos los partidos confirmados de eliminación a todos">🔓 Todos E</button>
+          <button class="btn btn-primary btn-sm" onclick="EXPORT_EXCEL('${qn}')">📥 Excel</button>
+        </div>
+        </div>
       ${us.length===0?'<p style="color:var(--muted);font-size:11px;text-align:center;padding:8px;">Sin participantes</p>':
         us.map(([n,u])=>{
           const stats=calcStats(u.preds||{},u.kopreds||{},{realkopreds:u.realkopreds||{}});
@@ -3338,6 +3384,7 @@ function buildAdminQSelector(activeTab){
             <div style="display:flex;flex-direction:column;gap:3px;">
               ${u.locked?`<button class="btn btn-secondary btn-sm" onclick="UU('${n}')" title="Desbloquear grupos">🔓 G</button>`:''}
               ${u.kolocked?`<button class="btn btn-secondary btn-sm" onclick="UUK('${n}')" title="Desbloquear eliminatoria" style="background:rgba(100,150,255,0.15);border-color:rgba(100,150,255,0.4);color:#7aadff;">🔓 E</button>`:''}
+                ${u.realkolocks&&Object.keys(u.realkolocks).length?`<button class="btn btn-secondary btn-sm" onclick="UUK_REAL_USER('${n}','${qn}')" title="Desbloquear partidos confirmados de eliminación de este usuario" style="background:rgba(122,173,255,0.15);border-color:rgba(122,173,255,0.4);color:#7aadff;">🔓 ER</button>`:''}
               <button class="btn btn-secondary btn-sm" onclick="RESET_PIN('${n}','${qn}')" title="Resetear PIN">🔑</button>
               <button class="btn btn-success btn-sm" onclick="OPEN_EDIT('${n}')">✏️</button>
               <button class="btn btn-danger btn-sm" onclick="DEL('${n}')">🗑️</button>
@@ -4171,7 +4218,23 @@ window.SKR=(id,side,val)=>{_realThirdsCache=null;
   if(!R.koresults[id])R.koresults[id]={h:'',a:''};
   R.koresults[id][side]=val===''?'':(parseInt(val)>=0?parseInt(val):0);
 };
-window.SAKR=btn=>{
+window.TAKR_PEN=(id,checked)=>{_realThirdsCache=null;
+  const R=getResults();
+  if(!R.koresults)R.koresults={};
+  if(!R.koresults[id])R.koresults[id]={h:'',a:''};
+  R.koresults[id].pen=!!checked;
+  if(!checked){delete R.koresults[id].ph;delete R.koresults[id].pa;}
+  save();
+  render();
+};
+window.SKR_PEN=(id,side,val)=>{_realThirdsCache=null;
+  const R=getResults();
+  if(!R.koresults)R.koresults={};
+  if(!R.koresults[id])R.koresults[id]={h:'',a:''};
+  R.koresults[id].pen=true;
+  R.koresults[id][side]=val===''?'':(parseInt(val)>=0?parseInt(val):0);
+};
+  window.SAKR=btn=>{
   _realThirdsCache=null;
   const mid=btn.getAttribute('data-mid');
   const rh=btn.getAttribute('data-h');
@@ -4202,11 +4265,31 @@ window.SAKR=btn=>{
     updateRealKOLockButton(id);
       save();
 };
+window.TRKO_PEN=(id,checked)=>{
+  const u=curUser();if(!u)return;
+  if(!userCanEditRealKO(id)||isUserRealKOLocked(u,id)) return;
+  if(!u.realkopreds)u.realkopreds={};
+  if(!u.realkopreds[id])u.realkopreds[id]={h:'',a:''};
+  u.realkopreds[id].pen=!!checked;
+  if(!checked){delete u.realkopreds[id].ph;delete u.realkopreds[id].pa;}
+  save();
+  render();
+};
+window.SRKO_PEN=(id,side,val)=>{
+  const u=curUser();if(!u)return;
+  if(!userCanEditRealKO(id)||isUserRealKOLocked(u,id)) return;
+  if(!u.realkopreds)u.realkopreds={};
+  if(!u.realkopreds[id])u.realkopreds[id]={h:'',a:''};
+  u.realkopreds[id].pen=true;
+  u.realkopreds[id][side]=val===''?'':(parseInt(val)>=0?parseInt(val):0);
+  save();
+    };
   window.LOCK_REAL_KO=async id=>{
   const u=curUser(); if(!u||!userCanEditRealKO(id)) return;
   const p=(u.realkopreds||{})[id];
   if(!p||p.h===''||p.h===undefined||p.a===''||p.a===undefined){alert('Captura el marcador antes de bloquearlo.');return;}
-  if(!confirm('¿Bloquear este resultado? Solo el administrador podrá desbloquearlo.')) return;
+if(p.pen&&!hasPenaltyScore(p)){alert('Captura un marcador de penales válido, sin empate, o desactiva la opción de penales.');return;}
+    if(!confirm('¿Bloquear este resultado? Solo el administrador podrá desbloquearlo.')) return;
   if(!u.realkolocks) u.realkolocks={};
   u.realkolocks[id]=true;
   await saveNow();
@@ -4216,6 +4299,8 @@ window.CONFIRM_KO_MATCH=async id=>{
   const R=getResults();
   if(!R.koresults) R.koresults={};
   if(!R.koresults[id]) R.koresults[id]={h:'',a:''};
+  const r=R.koresults[id];
+  if(r.pen&&!hasPenaltyScore(r)){alert('Captura un marcador de penales válido, sin empate, antes de confirmar.');return;}
   R.koresults[id].confirmed=true;
   await saveNow();
   showToast('🔓 Partido confirmado y desbloqueado para usuarios','info',3000);
@@ -4225,7 +4310,38 @@ window.CONFIRM_KO_MATCH=async id=>{
     window.SVP=()=>{const v=parseInt(document.getElementById('pinput').value)||0;const q=S.adminQ?getQ(S.adminQ):null;if(q)q.prize=v;save();render();};
 window.UU=n=>{if(confirm(`¿Desbloquear grupos de ${n}?`)){const q=S.adminQ?getQ(S.adminQ):null;if(q&&q.users[n]){q.users[n].locked=false;saveNow().then(()=>render());}}};
 window.UUK=n=>{if(confirm(`¿Desbloquear fase eliminatoria de ${n}?`)){const q=S.adminQ?getQ(S.adminQ):null;if(q&&q.users[n]){q.users[n].kolocked=false;saveNow().then(()=>render());}}};
-window.ADMIN_UNLOCK_REAL_KO=async id=>{
+window.UUK_REAL_USER=async (n,qn)=>{
+  const prev=S.adminQ;
+  if(qn) S.adminQ=qn;
+  const q=S.adminQ?getQ(S.adminQ):null;
+  if(!q||!q.users||!q.users[n]){ if(prev!==undefined) S.adminQ=prev; return; }
+  if(!confirm(`¿Desbloquear todos los partidos reales confirmados de eliminación de ${n}?`)){ if(prev!==undefined) S.adminQ=prev; return; }
+  q.users[n].realkolocks={};
+  await saveNow();
+  const predUpdates={}; predUpdates[S.adminQ+'__'+n]=serializeUserPreds(q.users[n]);
+  await _db.collection('preds').doc(SK).set(predUpdates,{merge:true});
+  if(prev!==undefined) S.adminQ=prev;
+  showToast('🔓 Partidos de eliminación desbloqueados para '+n,'info',3000);
+  render();
+};
+window.UUK_REAL_ALL_USERS=async qn=>{
+  const prev=S.adminQ;
+  if(qn) S.adminQ=qn;
+  const q=S.adminQ?getQ(S.adminQ):null;
+  if(!q||!q.users){ if(prev!==undefined) S.adminQ=prev; return; }
+  if(!confirm('¿Desbloquear TODOS los partidos reales confirmados de eliminación a TODOS los usuarios de esta quiniela?')){ if(prev!==undefined) S.adminQ=prev; return; }
+  const predUpdates={};
+  Object.entries(q.users).forEach(([n,u])=>{
+    u.realkolocks={};
+    predUpdates[S.adminQ+'__'+n]=serializeUserPreds(u);
+  });
+  await saveNow();
+  if(Object.keys(predUpdates).length) await _db.collection('preds').doc(SK).set(predUpdates,{merge:true});
+  if(prev!==undefined) S.adminQ=prev;
+  showToast('🔓 Partidos de eliminación desbloqueados para todos los usuarios','info',3500);
+  render();
+};
+  window.ADMIN_UNLOCK_REAL_KO=async id=>{
   const q=S.adminQ?getQ(S.adminQ):null;
   if(!q||!q.users){alert('Selecciona una quiniela primero.');return;}
   const names=Object.entries(q.users).filter(([,u])=>u.realkolocks&&u.realkolocks[id]).map(([n])=>n);
