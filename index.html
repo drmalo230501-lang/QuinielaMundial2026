@@ -576,6 +576,7 @@ async function load(){
             if(saved.preds) S.quinielas[qName].users[userName].preds = saved.preds;
             if(saved.kopreds) S.quinielas[qName].users[userName].kopreds = saved.kopreds;
          if(saved.realkopreds) S.quinielas[qName].users[userName].realkopreds = saved.realkopreds;
+       if(saved.realkolocks) S.quinielas[qName].users[userName].realkolocks = saved.realkolocks;
           }
         }catch(e){}
       });
@@ -610,14 +611,22 @@ function _showSaveIndicator(state){
 }
 
 // Save user preds separately to avoid overwriting other users' data
-let _predsTimer=null;
+function serializeUserPreds(u){
+  return JSON.stringify({
+    preds:u.preds||{},
+    kopreds:u.kopreds||{},
+    realkopreds:u.realkopreds||{},
+    realkolocks:u.realkolocks||{}
+  });
+}
+  let _predsTimer=null;
 async function saveUserPreds(){
   if(!S.cur) return;
   const qName=S.cur.quinielaName, userName=S.cur.name;
   const u=(S.quinielas[qName]||{}).users?.[userName];
   if(!u) return;
   const key=qName+'__'+userName;
-  const json=JSON.stringify({preds:u.preds||{},kopreds:u.kopreds||{},realkopreds:u.realkopreds||{}});
+  const json=serializeUserPreds(u);
   if(_predsTimer) clearTimeout(_predsTimer);
   _predsTimer=setTimeout(async()=>{
     try{
@@ -656,7 +665,7 @@ async function saveNow(){
       const u=(S.quinielas[qName]||{}).users?.[userName];
       if(u){
         const key=qName+'__'+userName;
-        const predsJson=JSON.stringify({preds:u.preds||{},kopreds:u.kopreds||{},realkopreds:u.realkopreds||{}});
+        const predsJson=serializeUserPreds(u);
         await _db.collection('preds').doc(SK).set({[key]:predsJson},{merge:true});
       }
     }
@@ -4222,8 +4231,13 @@ window.CONFIRM_UNLOCK_REAL_KO=async id=>{
   const selected=[...modal.querySelectorAll('[data-unlock-user]:checked')].map(x=>decodeURIComponent(x.value));
   if(!selected.length){alert('Selecciona al menos un usuario.');return;}
   selected.forEach(n=>{ if(q.users[n]&&q.users[n].realkolocks) delete q.users[n].realkolocks[id]; });
-  await saveNow();
- modal.remove();
+await saveNow();
+ if(S.adminQ){
+    const predUpdates={};
+    selected.forEach(n=>{ if(q.users[n]) predUpdates[S.adminQ+'__'+n]=serializeUserPreds(q.users[n]); });
+    if(Object.keys(predUpdates).length) await _db.collection('preds').doc(SK).set(predUpdates,{merge:true});
+  }
+  modal.remove();
   showToast('🔓 Partido desbloqueado para '+selected.join(', '),'info',3000);
   render();
 };
