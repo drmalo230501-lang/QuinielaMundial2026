@@ -2310,7 +2310,7 @@ function buildRealKOUserCard(m,realkopreds){
   const canEdit=userCanEditRealKO(m.id)&&!played&&!locked;
   const dis=canEdit?'':'disabled';
   const ph=p.h??'', pa=p.a??'';
-  c const scoreIsDraw=ph!==''&&pa!==''&&parseInt(ph)===parseInt(pa);
+  const scoreIsDraw=ph!==''&&pa!==''&&parseInt(ph)===parseInt(pa);
   const pens=scoreIsDraw||!!p.pen, pph=p.ph??'', ppa=p.pa??'';
   const filled=isRealKOPredLockReady(p);
   const lockBtn=!played&&userCanEditRealKO(m.id)
