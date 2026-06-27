@@ -2310,16 +2310,17 @@ function buildRealKOUserCard(m,realkopreds){
   const canEdit=userCanEditRealKO(m.id)&&!played&&!locked;
   const dis=canEdit?'':'disabled';
   const ph=p.h??'', pa=p.a??'';
-  const pens=!!p.pen, pph=p.ph??'', ppa=p.pa??'';
-  const filled=ph!==''&&pa!=='';
+  c const scoreIsDraw=ph!==''&&pa!==''&&parseInt(ph)===parseInt(pa);
+  const pens=scoreIsDraw||!!p.pen, pph=p.ph??'', ppa=p.pa??'';
+  const filled=isRealKOPredLockReady(p);
   const lockBtn=!played&&userCanEditRealKO(m.id)
     ? (locked?`<div class="locked-tag" style="margin-top:5px;">🔒 Resultado bloqueado</div>`:`<button id="real-ko-lock-${m.id}" class="btn btn-success btn-sm" style="margin-top:6px;font-size:10px;" ${filled?'':'disabled'} onclick="LOCK_REAL_KO('${m.id}')">🔒 Bloquear resultado</button>`)
   : '';
  const penaltyBox=`<div style="margin-top:6px;padding:6px;border:1px solid rgba(122,173,255,0.28);border-radius:9px;background:rgba(26,110,245,0.08);">
     <label style="display:flex;align-items:center;justify-content:center;gap:6px;font-size:10px;color:#7aadff;font-weight:800;cursor:pointer;">
-      <input type="checkbox" ${pens?'checked':''} ${dis} onchange="TRKO_PEN('${m.id}',this.checked)" style="width:15px;height:15px;"> ¿Crees que llegará a penales?
-    </label>
-    <div style="font-size:9px;color:var(--muted);line-height:1.3;margin-top:4px;text-align:center;">Activa esta opción solo si crees que el partido terminará empatado y se definirá en penales; captura también el marcador de penales.</div>
+      <input type="checkbox" ${pens?'checked':''} ${scoreIsDraw?'disabled':dis} onchange="TRKO_PEN('${m.id}',this.checked)" style="width:15px;height:15px;"> ¿Crees que llegará a penales?
+      </label>
+    <div style="font-size:9px;color:var(--muted);line-height:1.3;margin-top:4px;text-align:center;">Si el marcador queda empatado, esta opción se activa automáticamente y debes capturar un ganador en penales para poder bloquear.</div>
     ${pens?`<div class="ko-score-row" style="margin-top:6px;justify-content:center;"><input type="number" class="ko-score-inp" style="width:34px;height:30px;font-size:13px;" min="0" max="20" value="${pph}" ${dis} oninput="SRKO_PEN('${m.id}','ph',this.value)" inputmode="numeric" pattern="[0-9]*" /><span class="ko-vs">pen</span><input type="number" class="ko-score-inp" style="width:34px;height:30px;font-size:13px;" min="0" max="20" value="${ppa}" ${dis} oninput="SRKO_PEN('${m.id}','pa',this.value)" inputmode="numeric" pattern="[0-9]*" /></div>`:''}
   </div>`;
   return `<div class="ko-match mcard ${cls}"><div class="ko-match-lbl" style="display:flex;justify-content:space-between;align-items:center;"><span>${m.label} · ${m.d} · ${m.t||''} · ${m.v}</span>${badge}</div><div class="ko-teams"><div class="ko-team"><span class="ko-flag">${F(t.h)}</span><span class="ko-name">${t.h}</span></div><div class="ko-score-center"><div class="ko-score-row"><input type="number" class="ko-score-inp" min="0" max="20" value="${ph}" ${dis} oninput="SRKO('${m.id}','h',this.value)" inputmode="numeric" pattern="[0-9]*" /><span class="ko-vs">-</span><input type="number" class="ko-score-inp" min="0" max="20" value="${pa}" ${dis} oninput="SRKO('${m.id}','a',this.value)" inputmode="numeric" pattern="[0-9]*" /></div>${played?`<div style="margin-top:4px;font-size:10px;text-align:center;color:var(--muted);">Real: <strong style="color:#fff">${rr.h}-${rr.a}${penaltyText(rr)}</strong></div>`:`${penaltyBox}<div class="ko-pen-note">${locked?'Pide al administrador desbloquearlo si necesitas corregir.':'Predicción abierta hasta que se capture el resultado.'}</div>${lockBtn}`}</div><div class="ko-team"><span class="ko-flag">${F(t.a)}</span><span class="ko-name">${t.a}</span></div></div></div>`;
@@ -4247,13 +4248,19 @@ window.SKR_PEN=(id,side,val)=>{_realThirdsCache=null;
   saveNow();if(btn){btn.textContent='✅ Guardado!';setTimeout(()=>btn.textContent='💾 Guardar Resultados Eliminación',2000);}};
 
 
+ function isRealKOPredLockReady(p){
+  if(!p||p.h===''||p.h===undefined||p.a===''||p.a===undefined) return false;
+  const tied=parseInt(p.h)===parseInt(p.a);
+  if(tied) return !!p.pen&&hasPenaltyScore(p);
+  return true;
+}
   function updateRealKOLockButton(id){
   const u=curUser();
   const btn=document.getElementById('real-ko-lock-'+id);
   if(!u||!btn) return;
   const p=(u.realkopreds||{})[id];
-  const filled=!!(p&&p.h!==''&&p.h!==undefined&&p.a!==''&&p.a!==undefined);
-  btn.disabled=!filled;
+  const filled=isRealKOPredLockReady(p);
+    btn.disabled=!filled;
 }
 
     window.SRKO=(id,side,val)=>{
@@ -4261,17 +4268,26 @@ window.SKR_PEN=(id,side,val)=>{_realThirdsCache=null;
   if(!userCanEditRealKO(id)||isUserRealKOLocked(u,id)) return;
   if(!u.realkopreds)u.realkopreds={};
   if(!u.realkopreds[id])u.realkopreds[id]={h:'',a:''};
-  u.realkopreds[id][side]=val===''?'':(parseInt(val)>=0?parseInt(val):0);
-    updateRealKOLockButton(id);
+ const p=u.realkopreds[id];
+  const wasDraw=p.h!==''&&p.h!==undefined&&p.a!==''&&p.a!==undefined&&parseInt(p.h)===parseInt(p.a);
+  p[side]=val===''?'':(parseInt(val)>=0?parseInt(val):0);
+  const isDraw=p.h!==''&&p.h!==undefined&&p.a!==''&&p.a!==undefined&&parseInt(p.h)===parseInt(p.a);
+  if(isDraw) p.pen=true;
+  else { delete p.pen; delete p.ph; delete p.pa; }
+      updateRealKOLockButton(id);
       save();
-};
+  if(wasDraw!==isDraw) render();
+    };
 window.TRKO_PEN=(id,checked)=>{
   const u=curUser();if(!u)return;
   if(!userCanEditRealKO(id)||isUserRealKOLocked(u,id)) return;
   if(!u.realkopreds)u.realkopreds={};
   if(!u.realkopreds[id])u.realkopreds[id]={h:'',a:''};
-  u.realkopreds[id].pen=!!checked;
-  if(!checked){delete u.realkopreds[id].ph;delete u.realkopreds[id].pa;}
+ const p=u.realkopreds[id];
+  const isDraw=p.h!==''&&p.h!==undefined&&p.a!==''&&p.a!==undefined&&parseInt(p.h)===parseInt(p.a);
+  if(isDraw) p.pen=true;
+  else p.pen=!!checked;
+  if(!p.pen){delete p.ph;delete p.pa;}
   save();
   render();
 };
@@ -4282,13 +4298,16 @@ window.SRKO_PEN=(id,side,val)=>{
   if(!u.realkopreds[id])u.realkopreds[id]={h:'',a:''};
   u.realkopreds[id].pen=true;
   u.realkopreds[id][side]=val===''?'':(parseInt(val)>=0?parseInt(val):0);
+    updateRealKOLockButton(id);
   save();
     };
   window.LOCK_REAL_KO=async id=>{
   const u=curUser(); if(!u||!userCanEditRealKO(id)) return;
   const p=(u.realkopreds||{})[id];
   if(!p||p.h===''||p.h===undefined||p.a===''||p.a===undefined){alert('Captura el marcador antes de bloquearlo.');return;}
-if(p.pen&&!hasPenaltyScore(p)){alert('Captura un marcador de penales válido, sin empate, o desactiva la opción de penales.');return;}
+if(parseInt(p.h)===parseInt(p.a)){p.pen=true;if(!hasPenaltyScore(p)){alert('El marcador está empatado. Captura un marcador de penales válido y sin empate para definir un ganador.');return;}}
+  else if(p.pen&&!hasPenaltyScore(p)){alert('Captura un marcador de penales válido, sin empate, o desactiva la opción de penales.');return;}
+  else if(!p.pen){delete p.ph;delete p.pa;}
     if(!confirm('¿Bloquear este resultado? Solo el administrador podrá desbloquearlo.')) return;
   if(!u.realkolocks) u.realkolocks={};
   u.realkolocks[id]=true;
