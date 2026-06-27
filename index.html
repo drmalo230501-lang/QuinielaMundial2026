@@ -3555,7 +3555,16 @@ function getRealChampion(){
   return rh>ra?ht:at;
 }
 
-window.VIEW_PROFILE=function(playerName, qName){
+function allUsersLockedRealKOMatch(q, matchId){
+  const users=Object.values((q&&q.users)||{});
+  if(!users.length) return false;
+  return users.every(user=>{
+    const pred=(user.realkopreds||{})[matchId];
+    return !!(pred&&pred.h!==''&&pred.h!==undefined&&pred.a!==''&&pred.a!==undefined&&user.realkolocks&&user.realkolocks[matchId]);
+  });
+}
+  
+  window.VIEW_PROFILE=function(playerName, qName){
   const q=getQ(qName); if(!q) return;
   const u=q.users[playerName]; if(!u) return;
   const R=getResults();
@@ -3626,20 +3635,22 @@ window.VIEW_PROFILE=function(playerName, qName){
     const hasReal=real&&real.h!==''&&real.h!==undefined;
     const teams=getActualKOTeams(m);
     const pred=(u.realkopreds||{})[m.id];
-    const predTxt=pred&&pred.h!==''?`${pred.h}-${pred.a}`:'—';
+const allLocked=allUsersLockedRealKOMatch(q,m.id);
+    const predTxt=allLocked&&pred&&pred.h!==''?`${pred.h}-${pred.a}`:'🔒 Oculto';
     const realTxt=hasReal?`${real.h}-${real.a}`:(real&&real.confirmed?'Confirmado':'—');
     let ptsBadge='';
-    if(hasReal&&pred&&pred.h!==''){
+    if(allLocked&&hasReal&&pred&&pred.h!==''){
       const r=matchResult(pred,real);
       ptsBadge=r==='exact'?'<span class="mcard-result-badge rb-exact">+2</span>':r==='winner'?'<span class="mcard-result-badge rb-winner">+1</span>':'<span class="mcard-result-badge rb-miss">0</span>';
     }
     const rowBg=ptsBadge.includes('rb-exact')?'rgba(0,200,83,0.08)':ptsBadge.includes('rb-winner')?'rgba(255,215,0,0.06)':ptsBadge.includes('rb-miss')?'rgba(220,50,50,0.07)':'';
+   const privacyNote=allLocked?'':'<div style="font-size:9px;color:var(--muted);margin-top:2px;line-height:1.2;">Visible cuando todos bloqueen</div>';
     return `<tr style="background:${rowBg};border-bottom:1px solid rgba(255,255,255,0.04);">
       <td style="padding:5px 6px;font-size:10px;color:var(--muted);">${m.label}</td>
       <td style="padding:5px 6px;font-size:10px;">${F(teams.h)} ${(teams.h||'').slice(0,8)}</td>
       <td style="padding:5px 6px;font-size:10px;">${F(teams.a)} ${(teams.a||'').slice(0,8)}</td>
-      <td style="padding:5px 6px;font-size:11px;font-weight:700;text-align:center;">${predTxt}</td>
-      <td style="padding:5px 6px;font-size:11px;text-align:center;color:var(--muted);">${realTxt}</td>
+ <td style="padding:5px 6px;font-size:11px;font-weight:700;text-align:center;">${predTxt}${privacyNote}</td>
+ <td style="padding:5px 6px;font-size:11px;text-align:center;color:var(--muted);">${realTxt}</td>
       <td style="padding:5px 6px;text-align:center;">${ptsBadge}</td>
     </tr>`;
   }).join('');
