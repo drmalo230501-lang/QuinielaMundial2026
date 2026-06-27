@@ -1443,7 +1443,7 @@ function getAchievements(preds, kopreds){
 function calcStats(preds, kopreds, opts={}){  const R=getResults();
   const realRes=R.results||{};
   const realKO=R.koresults||{};
-  let total=0,exact=0,winner=0,miss=0,played=0;
+  let total=0,exact=0,winner=0,miss=0,played=0,realKOCorrect=0; 
   // Groups keep original scoring: +2 exact, +1 winner.
   for(const m of ALL){
      if(opts.excludeType==='group'&&opts.excludeId===m.id) continue;
@@ -1469,7 +1469,7 @@ function calcStats(preds, kopreds, opts={}){  const R=getResults();
       const userTeamA=resolveKOTeam(m.aPos, preds, kopreds);
       const teamsMatch=(userTeamH===realTeamH&&userTeamA===realTeamA)||(userTeamH===realTeamA&&userTeamA===realTeamH);
       played++;
-      if(teamsMatch){winner++;total+=1;} else miss++;
+      if(teamsMatch){realKOCorrect++;total+=1;} else miss++;
     }
     }
   // Real confirmed KO predictions: +1 winner, +1 extra exact score.
@@ -1486,13 +1486,13 @@ function calcStats(preds, kopreds, opts={}){  const R=getResults();
     else if(res==='winner'){winner++;total+=1;}
     else miss++;
   }
- return{total,exact,winner,miss,played,correct:exact+winner};
-                                            }
+ return{total,exact,winner,miss,played,realKOCorrect,correct:exact+winner};
+                                           }
 function compareRankingStats(a,b){
-  return b.total-a.total||b.correct-a.correct||b.exact-a.exact||a.miss-b.miss;
+  return b.total-a.total||b.correct-a.correct||b.realKOCorrect-a.realKOCorrect||b.exact-a.exact||a.miss-b.miss;
 }
 function sameRankingStats(a,b){
-  return !!a&&!!b&&a.total===b.total&&a.correct===b.correct&&a.exact===b.exact&&a.miss===b.miss;
+  return !!a&&!!b&&a.total===b.total&&a.correct===b.correct&&a.realKOCorrect===b.realKOCorrect&&a.exact===b.exact&&a.miss===b.miss;
 }
 function assignRankingPositions(ranked){
   let lastLockedRank=0;
@@ -1533,7 +1533,7 @@ function getRanking(quinielaName){
    .map(([n,u])=>({n,...calcStats(u.preds||{},u.kopreds||{},{realkopreds:u.realkopreds||{}}),locked:true}))
    .sort(compareRankingStats);
   const unlockedUsers=Object.entries(q.users||{}).filter(([,u])=>!u.locked)
-    .map(([n,u])=>({n,total:0,exact:0,winner:0,miss:0,played:0,correct:0,locked:false,move:{places:0,dir:'same'}}))
+    .map(([n,u])=>({n,total:0,exact:0,winner:0,miss:0,played:0,realKOCorrect:0,correct:0,locked:false,move:{places:0,dir:'same'}}))
     .sort((a,b)=>a.n.localeCompare(b.n));
   const ranked=[...lockedUsers,...unlockedUsers];
   assignRankingPositions(ranked);
@@ -2604,10 +2604,10 @@ async function createRankingImageBlob(qName){
   y=latestItems.length>1?314:334;
   ctx.textAlign='left';
  const twoCurrent=currentItems.length>1;
-  const cols=twoCurrent?{pos:84,name:150,pts:500,exact:580,winner:650,miss:720,current1:790,current2:890,diff:1000}:{pos:90,name:165,pts:560,exact:650,winner:730,miss:810,current1:890,diff:1000};
+  const cols=twoCurrent?{pos:84,name:150,pts:470,exact:545,winner:610,realko:675,miss:740,current1:805,current2:895,diff:1000}:{pos:90,name:165,pts:520,exact:600,winner:670,realko:740,miss:810,current1:890,diff:1000};
   ctx.fillStyle='#0a0a25';_roundRect(ctx,60,y,W-120,48,18);ctx.fill();
   ctx.fillStyle='#FFD700';ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';
-  ctx.fillText('#',cols.pos,y+31);ctx.fillText('Jugador',cols.name,y+31);ctx.fillText('Pts',cols.pts,y+31);ctx.fillText('✅',cols.exact,y+31);ctx.fillText('✔',cols.winner,y+31);ctx.fillText('❌',cols.miss,y+31);ctx.fillText(twoCurrent?'Curso 1':'En curso',cols.current1,y+31);if(twoCurrent)ctx.fillText('Curso 2',cols.current2,y+31);ctx.fillText('Δ1°',cols.diff,y+31);
+  ctx.fillText('#',cols.pos,y+31);ctx.fillText('Jugador',cols.name,y+31);ctx.fillText('Pts',cols.pts,y+31);ctx.fillText('✅',cols.exact,y+31);ctx.fillText('✔',cols.winner,y+31);ctx.fillText('🏟️',cols.realko,y+31);ctx.fillText('❌',cols.miss,y+31);ctx.fillText(twoCurrent?'Curso 1':'En curso',cols.current1,y+31);if(twoCurrent)ctx.fillText('Curso 2',cols.current2,y+31);ctx.fillText('Δ1°',cols.diff,y+31);
   y+=58;
   const topPts=rank.length?rank[0].total:0,medals=['🥇','🥈','🥉'];
   rank.slice(0,maxRows).forEach((u,i)=>{
@@ -2621,6 +2621,7 @@ async function createRankingImageBlob(qName){
     ctx.fillStyle='#FFD700';ctx.font='900 28px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText(locked?String(u.total):'—',cols.pts,y+34);
     ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillStyle='#69ff6e';ctx.fillText(locked?String(u.exact):'—',cols.exact,y+32);
     ctx.fillStyle='rgba(255,255,255,0.78)';ctx.fillText(locked?String(u.correct):'—',cols.winner,y+32);
+     ctx.fillStyle='#7aadff';ctx.fillText(locked?String(u.realKOCorrect):'—',cols.realko,y+32);
     ctx.fillStyle='#ff8a8a';ctx.fillText(locked?String(u.miss):'—',cols.miss,y+32);
      const picks=currentItems.map(item=>locked?getUserPickForCurrent((q||{}).users?.[u.n],item):null);
     ctx.font='900 22px system-ui, -apple-system, Segoe UI, sans-serif';
@@ -2630,7 +2631,7 @@ async function createRankingImageBlob(qName){
     y+=rowH;
   });
   if(rank.length>maxRows){ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.58)';ctx.font='600 22px system-ui';ctx.fillText(`+ ${rank.length-maxRows} participantes más`,W/2,y+26);}
- ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · En curso = pick del partido vigente (2 columnas solo en Jornada 3) · Desempate: correctos, exactos y fallados`,W/2,H-24);
+ ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · En curso = pick del partido vigente (2 columnas solo en Jornada 3) · Desempate: correctos, confirmados eliminación, exactos y fallados`,W/2,H-24);
   return await new Promise(resolve=>canvas.toBlob(resolve,'image/png',0.95));
 }
 
@@ -2830,10 +2831,10 @@ async function createRankingImageBlob(qName){
    y=latestItems.length>1?314:334;
   ctx.textAlign='left';
   const twoCurrent=currentItems.length>1;
-  const cols=twoCurrent?{pos:84,name:150,pts:500,exact:580,winner:650,miss:720,current1:790,current2:890,diff:1000}:{pos:90,name:165,pts:560,exact:650,winner:730,miss:810,current1:890,diff:1000};
+  const cols=twoCurrent?{pos:84,name:150,pts:470,exact:545,winner:610,realko:675,miss:740,current1:805,current2:895,diff:1000}:{pos:90,name:165,pts:520,exact:600,winner:670,realko:740,miss:810,current1:890,diff:1000};
   ctx.fillStyle='#0a0a25';_roundRect(ctx,60,y,W-120,48,18);ctx.fill();
   ctx.fillStyle='#FFD700';ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';
- ctx.fillText('#',cols.pos,y+31);ctx.fillText('Jugador',cols.name,y+31);ctx.fillText('Pts',cols.pts,y+31);ctx.fillText('✅',cols.exact,y+31);ctx.fillText('✔',cols.winner,y+31);ctx.fillText('❌',cols.miss,y+31);ctx.fillText(twoCurrent?'Curso 1':'En curso',cols.current1,y+31);if(twoCurrent)ctx.fillText('Curso 2',cols.current2,y+31);ctx.fillText('Δ1°',cols.diff,y+31);
+ ctx.fillText('#',cols.pos,y+31);ctx.fillText('Jugador',cols.name,y+31);ctx.fillText('Pts',cols.pts,y+31);ctx.fillText('✅',cols.exact,y+31);ctx.fillText('✔',cols.winner,y+31);ctx.fillText('🏟️',cols.realko,y+31);ctx.fillText('❌',cols.miss,y+31);ctx.fillText(twoCurrent?'Curso 1':'En curso',cols.current1,y+31);if(twoCurrent)ctx.fillText('Curso 2',cols.current2,y+31);ctx.fillText('Δ1°',cols.diff,y+31);
   y+=58;
   const topPts=rank.length?rank[0].total:0,medals=['🥇','🥈','🥉'];
   rank.slice(0,maxRows).forEach((u,i)=>{
@@ -2847,6 +2848,7 @@ async function createRankingImageBlob(qName){
     ctx.fillStyle='#FFD700';ctx.font='900 28px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillText(locked?String(u.total):'—',cols.pts,y+34);
     ctx.font='800 22px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillStyle='#69ff6e';ctx.fillText(locked?String(u.exact):'—',cols.exact,y+32);
     ctx.fillStyle='rgba(255,255,255,0.78)';ctx.fillText(locked?String(u.correct):'—',cols.winner,y+32);
+        ctx.fillStyle='#7aadff';ctx.fillText(locked?String(u.realKOCorrect):'—',cols.realko,y+32);
     ctx.fillStyle='#ff8a8a';ctx.fillText(locked?String(u.miss):'—',cols.miss,y+32);
     const picks=currentItems.map(item=>locked?getUserPickForCurrent((q||{}).users?.[u.n],item):null);
     ctx.font='900 22px system-ui, -apple-system, Segoe UI, sans-serif';
@@ -2856,7 +2858,7 @@ async function createRankingImageBlob(qName){
     y+=rowH;
   });
   if(rank.length>maxRows){ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.58)';ctx.font='600 22px system-ui';ctx.fillText(`+ ${rank.length-maxRows} participantes más`,W/2,y+26);}
-  ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · En curso = pick del partido vigente (2 columnas solo en Jornada 3) · Desempate: correctos, exactos y fallados`,W/2,H-24);
+  ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · En curso = pick del partido vigente (2 columnas solo en Jornada 3) · Desempate: correctos, confirmados eliminación, exactos y fallados`,W/2,H-24);
   return await new Promise(resolve=>canvas.toBlob(resolve,'image/png',0.95));
 }
 
@@ -2909,14 +2911,15 @@ function buildRanking(){
         <th>Pts</th>
         <th>✅</th>
         <th>✔</th>
+        <th>🏟️</th>
         <th>❌</th>
         <th>vs 1°</th>
          ${getCurrentMatchItems().length>1?'<th>En curso 1</th><th>En curso 2</th>':'<th>En curso</th>'}
         <th>🏆 Campeón</th>
       </tr></thead>
       <tbody>
-     ${rank.length===0?`<tr><td colspan="${getCurrentMatchItems().length>1?10:9}" style="text-align:center;color:var(--muted);padding:20px;">Sin participantes guardados</td></tr>`
-      :rank.map((u,i)=>{
+     ${rank.length===0?`<tr><td colspan="${getCurrentMatchItems().length>1?11:10}" style="text-align:center;color:var(--muted);padding:20px;">Sin participantes guardados</td></tr>`
+       :rank.map((u,i)=>{
         const isLocked=u.locked!==false;
         const rowCls=isLocked?(i===0?'top1':i===1?'top2':i===2?'top3':''):'';
         const pos=isLocked?u.rankPos:'—';
@@ -2930,6 +2933,7 @@ function buildRanking(){
         <td class="pts-big">${isLocked?u.total:'—'}</td>
         <td><span class="bs bs-g">${isLocked?u.exact:'—'}</span></td>
        <td><span class="bs bs-ok">${isLocked?u.correct:'—'}</span></td>
+         <td><span class="bs bs-ok">${isLocked?u.realKOCorrect:'—'}</span></td>       
         <td><span class="bs bs-r">${isLocked?u.miss:'—'}</span></td>
          <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>
        ${getCurrentMatchItems().map(item=>{ const p=getUserPickForCurrent((getQ(qName)||{}).users?.[u.n],item); return `<td>${p?`<span class="current-pick">${p}</span>`:`<span class="current-pick missing">—</span>`}</td>`; }).join('')}
@@ -2948,8 +2952,8 @@ function buildRanking(){
       </tbody>
     </table>
     </div>
-    <div style="padding:8px 14px;font-size:10px;color:var(--muted);">✔ Correctos (incluye exactos) · ✅ Exactos · vs 1° = diferencia con el líder</div>
-  </div>
+    <div style="padding:8px 14px;font-size:10px;color:var(--muted);">✔ Correctos grupos/bracket (incluye exactos) · 🏟️ Confirmados eliminación atinados · ✅ Exactos · vs 1° = diferencia con el líder</div>
+    </div>
   ${buildPointsChart(qName)}`;
 }
   function buildHomeRankingSection(qNames){
@@ -2979,11 +2983,11 @@ function buildPublicRankingCard(qName){
     <div style="overflow-x:auto;">
       <table class="rank-table">
         <thead><tr>
-         <th>#</th><th style="text-align:left;">Jugador</th><th>Pts</th><th>✅</th><th>✔</th><th>❌</th><th>vs 1°</th>${getCurrentMatchItems().length>1?'<th>En curso 1</th><th>En curso 2</th>':'<th>En curso</th>'}
-        </tr></thead>
+         <th>#</th><th style="text-align:left;">Jugador</th><th>Pts</th><th>✅</th><th>✔</th><th>🏟️</th><th>❌</th><th>vs 1°</th>${getCurrentMatchItems().length>1?'<th>En curso 1</th><th>En curso 2</th>':'<th>En curso</th>'}
+         </tr></thead>
         <tbody>
-          ${rank.length===0?`<tr><td colspan="${getCurrentMatchItems().length>1?9:8}" style="text-align:center;color:var(--muted);padding:16px;">Sin participantes guardados</td></tr>`:
-          rank.map((u,i)=>{
+          ${rank.length===0?`<tr><td colspan="${getCurrentMatchItems().length>1?10:9}" style="text-align:center;color:var(--muted);padding:16px;">Sin participantes guardados</td></tr>`:
+            rank.map((u,i)=>{
             const isLocked=u.locked!==false;
             const rowCls=isLocked?(i===0?'top1':i===1?'top2':i===2?'top3':''):'';
             const pos=isLocked?u.rankPos:'—';
@@ -2993,6 +2997,7 @@ function buildPublicRankingCard(qName){
 <td><strong style="cursor:pointer;text-decoration:underline dotted;color:var(--gold);" onclick="VIEW_PROFILE('${u.n}','${qName}')">${u.n}</strong>${isLocked?rankingMoveHtml(u):'<span style="font-size:9px;color:var(--muted);margin-left:3px;">✏️</span>'}</td>              <td class="pts-big">${isLocked?u.total:'—'}</td>
               <td><span class="bs bs-g">${isLocked?u.exact:'—'}</span></td>
                <td><span class="bs bs-ok">${isLocked?u.correct:'—'}</span></td>
+              <td><span class="bs bs-ok">${isLocked?u.realKOCorrect:'—'}</span></td>      
               <td><span class="bs bs-r">${isLocked?u.miss:'—'}</span></td>
               <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>
             ${getCurrentMatchItems().map(item=>{ const p=getUserPickForCurrent((getQ(qName)||{}).users?.[u.n],item); return `<td>${p?`<span class="current-pick">${p}</span>`:`<span class="current-pick missing">—</span>`}</td>`; }).join('')}
@@ -3001,8 +3006,8 @@ function buildPublicRankingCard(qName){
         </tbody>
       </table>
     </div>
-    <div style="padding-top:8px;font-size:10px;color:var(--muted);">✅ Exacto +2pts · ✔ Ganador +1pt · toca un jugador para ver su detalle</div>
-  </div>`;
+    <div style="padding-top:8px;font-size:10px;color:var(--muted);">✅ Exacto +2pts · ✔ Ganador +1pt · 🏟️ confirmado eliminación atinado · toca un jugador para ver su detalle</div>
+    </div>`;
 }
 
 
@@ -4556,12 +4561,12 @@ window.EXPORT_EXCEL = function(qName) {
   const wb = XLSX.utils.book_new();
 
   // ── HOJA 1: RANKING ──────────────────────────────────────────
-  const rankData = [['#','Participante','Pts','Exactos (2pts)','Correctos','Ganador sin exacto (1pt)','Fallados','Partidos jugados','Grupos bloqueado','Elim. bloqueado']];
+  const rankData = [['#','Participante','Pts','Exactos (2pts)','Correctos','Confirmados eliminación atinados','Ganador sin exacto (1pt)','Fallados','Partidos jugados','Grupos bloqueado','Elim. bloqueado']];
   const ranking = getRanking(qName);
   ranking.forEach((r, i) => {
     const u = q.users[r.n] || {};
     rankData.push([
-      r.rankPos || i + 1, r.n, r.total, r.exact, r.correct, r.winner, r.miss, r.played,
+      r.rankPos || i + 1, r.n, r.total, r.exact, r.correct, r.realKOCorrect, r.winner, r.miss, r.played,
       u.locked ? 'Sí' : 'No',
       u.kolocked ? 'Sí' : 'No'
     ]);
@@ -4569,10 +4574,10 @@ window.EXPORT_EXCEL = function(qName) {
   // Add unranked (not locked yet)
   Object.entries(q.users || {}).filter(([,u]) => !u.locked).forEach(([n, u]) => {
     const filled = ALL.filter(m => u.preds && u.preds[m.id] && u.preds[m.id].h !== '').length;
-   rankData.push(['—', n, '—', '—', '—', '—', '—', `${filled}/${TOTAL} capturados`, 'No', u.kolocked ? 'Sí' : 'No']);
+   rankData.push(['—', n, '—', '—', '—', '—', '—', '—', `${filled}/${TOTAL} capturados`, 'No', u.kolocked ? 'Sí' : 'No']);
   });
   const wsRank = XLSX.utils.aoa_to_sheet(rankData);
-  wsRank['!cols'] = [{wch:4},{wch:22},{wch:6},{wch:16},{wch:12},{wch:22},{wch:10},{wch:18},{wch:18},{wch:18}];
+  wsRank['!cols'] = [{wch:4},{wch:22},{wch:6},{wch:16},{wch:12},{wch:30},{wch:22},{wch:10},{wch:18},{wch:18},{wch:18}];
   XLSX.utils.book_append_sheet(wb, wsRank, 'Ranking');
 
   // ── HOJA 2: PREDICCIONES GRUPOS ──────────────────────────────
