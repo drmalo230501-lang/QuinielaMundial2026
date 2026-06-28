@@ -1425,6 +1425,25 @@ function hasPenaltyScore(item){
 function penaltyText(item){
   return hasPenaltyScore(item)?` (Pen. ${item.ph}-${item.pa})`:'';
 }
+
+  function scoreRealKOPrediction(pred, real){
+  if(!real||real.h===''||real.h===undefined||real.a===''||real.a===undefined) return {status:'pending',points:null,classified:false,exactScore:false,exactPens:false};
+  const rh=parseInt(real.h),ra=parseInt(real.a);
+  if(isNaN(rh)||isNaN(ra)) return {status:'pending',points:null,classified:false,exactScore:false,exactPens:false};
+  if(!pred||pred.h===''||pred.h===undefined||pred.a===''||pred.a===undefined) return {status:'miss',points:0,classified:false,exactScore:false,exactPens:false};
+  const ph=parseInt(pred.h),pa=parseInt(pred.a);
+  if(isNaN(ph)||isNaN(pa)) return {status:'miss',points:0,classified:false,exactScore:false,exactPens:false};
+  const classified=scoreSideWinner(real)===scoreSideWinner(pred)&&!!scoreSideWinner(real)&&scoreSideWinner(real)!=='d';
+  const exactScore=rh===ph&&ra===pa;
+  const exactPens=exactScore&&rh===ra&&!!real.pen&&!!pred.pen&&hasPenaltyScore(real)&&hasPenaltyScore(pred)&&parseInt(real.ph)===parseInt(pred.ph)&&parseInt(real.pa)===parseInt(pred.pa);
+  const points=(classified?1:0)+(exactScore?1:0)+(exactPens?1:0);
+  return {status:points===0?'miss':exactPens?'penExact':exactScore?'exact':classified?'winner':'miss',points,classified,exactScore,exactPens};
+}
+function realKOPointsBadge(sc){
+  if(!sc||sc.points===null) return '';
+  const cls=sc.points>=2?'rb-exact':sc.points===1?'rb-winner':'rb-miss';
+  return `<span class="mcard-result-badge ${cls}">${sc.points?`+${sc.points}pts`:'0 pts'}</span>`;
+}
   function matchResult(pred,real){
   if(!real||real.h===''||real.h===undefined||real.a===''||real.a===undefined) return 'pending';
   const rh=parseInt(real.h),ra=parseInt(real.a);
@@ -1499,19 +1518,20 @@ function calcStats(preds, kopreds, opts={}){  const R=getResults();
       if(teamsMatch){realKOCorrect++;total+=1;} else miss++;
     }
     }
-  // Real confirmed KO predictions: +1 winner, +1 extra exact score.
+  // Real confirmed KO predictions: +1 classified team, +1 exact score, +1 exact penalties (only after exact draw score). 
   const realkopreds=opts.realkopreds||{};
   for(const m of KO_MATCHES){
     if(opts.excludeType==='realko'&&opts.excludeId===m.id) continue;
     const real=realKO[m.id];
     if(!real||real.h===''||real.h===undefined||real.a===''||real.a===undefined) continue;
     const pred=realkopreds[m.id];
-    const res=matchResult(pred,real);
-    if(res==='pending'){miss++;played++;continue;}
+     const sc=scoreRealKOPrediction(pred,real);
+    if(sc.status==='pending'){miss++;played++;continue;}
     played++;
-    if(res==='exact'){exact++;total+=2;}
-    else if(res==='winner'){winner++;total+=1;}
-    else miss++;
+    total+=sc.points;
+    if(sc.exactScore) exact++;
+    if(sc.classified) winner++;
+    if(sc.points===0) miss++;
   }
  return{total,exact,winner,miss,played,realKOCorrect,correct:exact+winner};
                                            }
@@ -2296,16 +2316,16 @@ function buildEliminacionReal(){
   const realkopreds=(user&&user.realkopreds)||{};
   const available=KO_MATCHES.filter(realKOMatchAvailable);
   if(!available.length) return `<div style="padding:24px;text-align:center;color:var(--muted);font-size:12px;">⏳ Aquí aparecerán los partidos reales cuando el administrador los confirme.</div>`;
-  return `<div class="alert alert-w" style="margin:10px;">✅ Estos son los cruces reales confirmados. Predice marcador: +1 por ganador y +1 extra por marcador exacto.</div>${['D16','R16','QF','SF','3P','FIN'].map(r=>{const ms=available.filter(m=>m.round===r);return ms.length?`<div class="ko-round-label">${ROUND_LABELS[r]}</div>${ms.map(m=>buildRealKOUserCard(m,realkopreds)).join('')}`:'';}).join('')}`;
+  return `<div class="alert alert-w" style="margin:10px;">✅ Estos son los cruces reales confirmados. Puntuación: +1 si atinas quién clasifica, +1 por marcador exacto y +1 por penales exactos (solo si atinaste el empate exacto).</div>${['D16','R16','QF','SF','3P','FIN'].map(r=>{const ms=available.filter(m=>m.round===r);return ms.length?`<div class="ko-round-label">${ROUND_LABELS[r]}</div>${ms.map(m=>buildRealKOUserCard(m,realkopreds)).join('')}`:'';}).join('')}`;
 }
 function buildRealKOUserCard(m,realkopreds){
    const user=curUser();
   const t=getActualKOTeams(m), p=realkopreds[m.id]||{h:'',a:''};
   const rr=(getResults().koresults||{})[m.id];
   const played=rr&&rr.h!==''&&rr.h!==undefined&&rr.a!==''&&rr.a!==undefined;
-  const res=played?matchResult(p,rr):'pending';
-  const cls=res==='exact'?'exact':res==='winner'?'winner':res==='miss'?'miss':'';
-  const badge=played?`<span class="mcard-result-badge ${res==='exact'?'rb-exact':res==='winner'?'rb-winner':'rb-miss'}">${res==='exact'?'✅ +2pts':res==='winner'?'✔ +1pt':'❌ 0pts'}</span>`:'';
+ const sc=played?scoreRealKOPrediction(p,rr):null;
+  const cls=sc?(sc.points>=2?'exact':sc.points===1?'winner':'miss'):'';
+  const badge=played?realKOPointsBadge(sc):'';
   const locked=isUserRealKOLocked(user,m.id);
   const canEdit=userCanEditRealKO(m.id)&&!played&&!locked;
   const dis=canEdit?'':'disabled';
@@ -3534,13 +3554,13 @@ function buildInstrucciones(){
 
       <div class="instr-block"><h3>🏅 Puntuación</h3>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-          <span class="ibadge ibadge-g">✅ +2 pts — marcador exacto</span>
-          <span class="ibadge ibadge-y">✔ +1 pt — solo acertar ganador o empate</span>
+           <span class="ibadge ibadge-g">✅ Grupos: +2 pts — marcador exacto</span>
+          <span class="ibadge ibadge-y">✔ Grupos: +1 pt — solo acertar ganador o empate</span>
           <span class="ibadge" style="background:rgba(220,50,50,0.2);color:#ff8a8a;border:1px solid rgba(220,50,50,0.3);padding:4px 8px;border-radius:20px;font-size:10px;">❌ 0 pts — resultado incorrecto</span>
         </div>
         <p style="margin:0;">Ejemplo: predices <em>México 2-1</em> → sale 2-1 = <strong style="color:#69ff6e;">+2 pts</strong> · sale 3-1 = <strong style="color:var(--gold);">+1 pt</strong> · sale 0-1 = <strong style="color:#ff8a8a;">0 pts</strong></p>
-        <p style="margin:4px 0 0;font-size:11px;color:var(--muted);">En fase eliminatoria aplican los mismos puntos, pero si el equipo que predijiste no llegó a ese partido = 0 pts automático.</p>
-      </div>
+<p style="margin:4px 0 0;font-size:11px;color:var(--muted);">En la predicción inicial de fase eliminatoria los marcadores no suman puntos; solo cuenta acertar el cruce. En los cruces reales confirmados: +1 por clasificado, +1 por marcador exacto y +1 por penales exactos si también atinaste el empate exacto.</p>
+</div>
 
       <div class="instr-block"><h3>🎨 Colores en tu quiniela</h3>
         <div style="display:flex;flex-direction:column;gap:6px;">
@@ -3695,8 +3715,8 @@ const allLocked=allUsersLockedRealKOMatch(q,m.id);
     const realTxt=hasReal?`${real.h}-${real.a}`:(real&&real.confirmed?'Confirmado':'—');
     let ptsBadge='';
     if(allLocked&&hasReal&&pred&&pred.h!==''){
-      const r=matchResult(pred,real);
-      ptsBadge=r==='exact'?'<span class="mcard-result-badge rb-exact">+2</span>':r==='winner'?'<span class="mcard-result-badge rb-winner">+1</span>':'<span class="mcard-result-badge rb-miss">0</span>';
+      const sc=scoreRealKOPrediction(pred,real);
+      ptsBadge=realKOPointsBadge(sc);
     }
     const rowBg=ptsBadge.includes('rb-exact')?'rgba(0,200,83,0.08)':ptsBadge.includes('rb-winner')?'rgba(255,215,0,0.06)':ptsBadge.includes('rb-miss')?'rgba(220,50,50,0.07)':'';
    const privacyNote=allLocked?'':'<div style="font-size:9px;color:var(--muted);margin-top:2px;line-height:1.2;">Visible cuando todos bloqueen</div>';
@@ -3828,7 +3848,11 @@ function notifyResultSaved(matchId, h, a, isKO){
     const q=getQ(S.cur.quinielaName);
     const u=q&&q.users[S.cur.name];
     if(!u) return;
-    const pred=isKO?(u.kopreds||{})[matchId]:(u.preds||{})[matchId];
+if(isKO){
+      showToast(`🏆 Eliminación actualizada: los marcadores del bracket inicial no suman; revisa cruces y predicciones reales de ${label}.`, 'info', 4000);
+      return;
+    }
+    const pred=(u.preds||{})[matchId];
     if(!pred||pred.h==='') return;
     const real={h:String(h),a:String(a)};
     const res=matchResult(pred,real);
@@ -4774,11 +4798,25 @@ window.EXPORT_EXCEL = function(qName) {
     KO_MATCHES.forEach(m => {
       const p = (u.kopreds || {})[m.id];
       const real = realKO[m.id];
-      const predTxt = p && p.h !== '' ? `${p.h}-${p.a}` : '—';
-      const realTxt = real && real.h !== '' ? `${real.h}-${real.a}` : 'Pendiente';
-      const res = matchResult(p, real);
-      const pts = res === 'exact' ? 2 : res === 'winner' ? 1 : res === 'pending' ? '—' : 0;
-      detData.push([n, m.label, ROUND_LABELS[m.round] || m.round, m.hPos, m.aPos, predTxt, realTxt, pts]);
+     const actual = getActualKOTeams(m);
+      const userH = resolveKOTeam(m.hPos, u.preds || {}, u.kopreds || {});
+      const userA = resolveKOTeam(m.aPos, u.preds || {}, u.kopreds || {});
+      const predTxt = userH && userA ? `${userH} vs ${userA}` : '—';
+      const realTxt = actual.h && actual.a ? `${actual.h} vs ${actual.a}` : (real && real.h !== '' ? `${real.h}-${real.a}` : 'Pendiente');
+      const hasReal = real && (real.confirmed || real.h !== '' || real.h === 0);
+      const ok = hasReal && ((userH === actual.h && userA === actual.a) || (userH === actual.a && userA === actual.h));
+      const pts = hasReal ? (ok ? 1 : 0) : '—';
+      detData.push([n, m.label, `${ROUND_LABELS[m.round] || m.round} (cruce inicial)`, m.hPos, m.aPos, predTxt, realTxt, pts]);
+    });
+    KO_MATCHES.forEach(m => {
+      const p = (u.realkopreds || {})[m.id];
+      const real = realKO[m.id];
+      const teams = getActualKOTeams(m);
+      const predTxt = p && p.h !== '' ? `${p.h}-${p.a}${penaltyText(p)}` : '—';
+      const realTxt = real && real.h !== '' ? `${real.h}-${real.a}${penaltyText(real)}` : 'Pendiente';
+      const sc = scoreRealKOPrediction(p, real);
+      const pts = sc.points === null ? '—' : sc.points;
+      detData.push([n, m.label, `${ROUND_LABELS[m.round] || m.round} (cruce real)`, teams.h, teams.a, predTxt, realTxt, pts]);
     });
   });
   const wsDet = XLSX.utils.aoa_to_sheet(detData);
