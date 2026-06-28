@@ -2772,7 +2772,9 @@ function getResultForItem(item){
 }
 function getUserPickForCurrent(u,item){
   if(!u||!item) return null;
-  const p=item.type==='ko'?(u.kopreds||{})[item.match.id]:(u.preds||{})[item.match.id];
+// For knockout matches, "En curso" must show the user's pick from the
+  // confirmed real-match section, not their original projected bracket pick.
+  const p=item.type==='ko'?(u.realkopreds||{})[item.match.id]:(u.preds||{})[item.match.id];
   if(!p||p.h===''||p.h===undefined||p.a===''||p.a===undefined) return null;
   return `${parseInt(p.h,10)}-${parseInt(p.a,10)}`;
 }
