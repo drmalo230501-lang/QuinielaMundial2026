@@ -1433,7 +1433,9 @@ function penaltyText(item){
   if(!pred||pred.h===''||pred.h===undefined||pred.a===''||pred.a===undefined) return {status:'miss',points:0,classified:false,exactScore:false,exactPens:false};
   const ph=parseInt(pred.h),pa=parseInt(pred.a);
   if(isNaN(ph)||isNaN(pa)) return {status:'miss',points:0,classified:false,exactScore:false,exactPens:false};
-  const classified=scoreSideWinner(real)===scoreSideWinner(pred)&&!!scoreSideWinner(real)&&scoreSideWinner(real)!=='d';
+const outcome120=(rh>ra?'h':rh<ra?'a':'d');
+  const predOutcome120=(ph>pa?'h':ph<pa?'a':'d');
+  const classified=outcome120===predOutcome120;
   const exactScore=rh===ph&&ra===pa;
   const exactPens=exactScore&&rh===ra&&!!real.pen&&!!pred.pen&&hasPenaltyScore(real)&&hasPenaltyScore(pred)&&parseInt(real.ph)===parseInt(pred.ph)&&parseInt(real.pa)===parseInt(pred.pa);
   const points=(classified?1:0)+(exactScore?1:0)+(exactPens?1:0);
@@ -1518,8 +1520,8 @@ function calcStats(preds, kopreds, opts={}){  const R=getResults();
       if(teamsMatch){realKOCorrect++;total+=1;} else miss++;
     }
     }
-  // Real confirmed KO predictions: +1 classified team, +1 exact score, +1 exact penalties (only after exact draw score). 
-  const realkopreds=opts.realkopreds||{};
+// Real confirmed KO predictions: +1 outcome in 120 minutes (win/draw), +1 exact 120-minute score, +1 exact penalties (only after exact draw score).
+                                            const realkopreds=opts.realkopreds||{};
   for(const m of KO_MATCHES){
     if(opts.excludeType==='realko'&&opts.excludeId===m.id) continue;
     const real=realKO[m.id];
@@ -2316,7 +2318,7 @@ function buildEliminacionReal(){
   const realkopreds=(user&&user.realkopreds)||{};
   const available=KO_MATCHES.filter(realKOMatchAvailable);
   if(!available.length) return `<div style="padding:24px;text-align:center;color:var(--muted);font-size:12px;">⏳ Aquí aparecerán los partidos reales cuando el administrador los confirme.</div>`;
-  return `<div class="alert alert-w" style="margin:10px;">✅ Estos son los cruces reales confirmados. Puntuación: +1 si atinas quién clasifica, +1 por marcador exacto y +1 por penales exactos (solo si atinaste el empate exacto).</div>${['D16','R16','QF','SF','3P','FIN'].map(r=>{const ms=available.filter(m=>m.round===r);return ms.length?`<div class="ko-round-label">${ROUND_LABELS[r]}</div>${ms.map(m=>buildRealKOUserCard(m,realkopreds)).join('')}`:'';}).join('')}`;
+  return `<div class="alert alert-w" style="margin:10px;">✅ Estos son los cruces reales confirmados. Puntuación: +1 si atinas ganador/empate en 120 min, +1 por marcador exacto en 120 min y +1 por penales exactos solo si atinaste el empate exacto en 120 min.</div>${['D16','R16','QF','SF','3P','FIN'].map(r=>{const ms=available.filter(m=>m.round===r);return ms.length?`<div class="ko-round-label">${ROUND_LABELS[r]}</div>${ms.map(m=>buildRealKOUserCard(m,realkopreds)).join('')}`:'';}).join('')}`;
 }
 function buildRealKOUserCard(m,realkopreds){
    const user=curUser();
@@ -2681,13 +2683,13 @@ async function createRankingImageBlob(qName){
     ctx.fillStyle='#ff8a8a';ctx.fillText(locked?String(u.miss):'—',cols.miss,y+32);
      const picks=currentItems.map(item=>locked?getUserPickForCurrent((q||{}).users?.[u.n],item):null);
     ctx.font='900 22px system-ui, -apple-system, Segoe UI, sans-serif';
-    ctx.fillStyle=picks[0]?'#69ff6e':'rgba(255,255,255,0.45)';ctx.fillText(picks[0]||'—',cols.current1,y+32);
-    if(twoCurrent){ctx.fillStyle=picks[1]?'#69ff6e':'rgba(255,255,255,0.45)';ctx.fillText(picks[1]||'—',cols.current2,y+32);}
+    ctx.fillStyle=picks[0]?'#69ff6e':'rgba(255,255,255,0.45)';drawCurrentPickCanvas(ctx,picks[0],cols.current1,y+32);
+    if(twoCurrent){ctx.fillStyle=picks[1]?'#69ff6e':'rgba(255,255,255,0.45)';drawCurrentPickCanvas(ctx,picks[1],cols.current2,y+32);}
     if(locked&&i>0){ctx.fillStyle='rgba(255,255,255,0.45)';ctx.font='600 18px system-ui';ctx.fillText(`-${topPts-u.total}`,cols.diff,y+31);}
     y+=rowH;
   });
   if(rank.length>maxRows){ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.58)';ctx.font='600 22px system-ui';ctx.fillText(`+ ${rank.length-maxRows} participantes más`,W/2,y+26);}
- ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · En curso = pick del partido vigente (2 columnas solo en Jornada 3) · Desempate: correctos, confirmados eliminación, exactos y fallados`,W/2,H-24);
+ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · En curso = pick del partido vigente (2 columnas solo en Jornada 3) · Desempate: correctos, cruces bracket, exactos y fallados`,W/2,H-24);
   return await new Promise(resolve=>canvas.toBlob(resolve,'image/png',0.95));
 }
 
@@ -2796,7 +2798,19 @@ function getUserPickForCurrent(u,item){
   // confirmed real-match section, not their original projected bracket pick.
   const p=item.type==='ko'?(u.realkopreds||{})[item.match.id]:(u.preds||{})[item.match.id];
   if(!p||p.h===''||p.h===undefined||p.a===''||p.a===undefined) return null;
-  return `${parseInt(p.h,10)}-${parseInt(p.a,10)}`;
+const base=`${parseInt(p.h,10)}-${parseInt(p.a,10)}`;
+  if(item.type==='ko'&&parseInt(p.h,10)===parseInt(p.a,10)&&hasPenaltyScore(p)) return `${base}\nPen ${parseInt(p.ph,10)}-${parseInt(p.pa,10)}`;
+  return base;
+}
+function currentPickHtml(pick){
+  if(!pick) return '<span class="current-pick missing">—</span>';
+  const parts=String(pick).split('\n');
+  return `<span class="current-pick">${parts[0]}${parts[1]?`<br><small style="font-size:9px;color:#7aadff;font-weight:900;white-space:nowrap;">${parts[1]}</small>`:''}</span>`;
+}
+function drawCurrentPickCanvas(ctx,pick,x,y){
+  const parts=pick?String(pick).split('\n'):['—'];
+  ctx.fillText(parts[0],x,y+(parts[1]?-5:0));
+  if(parts[1]){ctx.save();ctx.font='800 14px system-ui, -apple-system, Segoe UI, sans-serif';ctx.fillStyle='#7aadff';ctx.fillText(parts[1],x,y+15);ctx.restore();}
 }
 function buildCurrentMatchCard(){
   const items=getCurrentMatchItems();
@@ -2910,13 +2924,13 @@ async function createRankingImageBlob(qName){
     ctx.fillStyle='#ff8a8a';ctx.fillText(locked?String(u.miss):'—',cols.miss,y+32);
     const picks=currentItems.map(item=>locked?getUserPickForCurrent((q||{}).users?.[u.n],item):null);
     ctx.font='900 22px system-ui, -apple-system, Segoe UI, sans-serif';
-    ctx.fillStyle=picks[0]?'#69ff6e':'rgba(255,255,255,0.45)';ctx.fillText(picks[0]||'—',cols.current1,y+32);
-    if(twoCurrent){ctx.fillStyle=picks[1]?'#69ff6e':'rgba(255,255,255,0.45)';ctx.fillText(picks[1]||'—',cols.current2,y+32);}
+     ctx.fillStyle=picks[0]?'#69ff6e':'rgba(255,255,255,0.45)';drawCurrentPickCanvas(ctx,picks[0],cols.current1,y+32);
+    if(twoCurrent){ctx.fillStyle=picks[1]?'#69ff6e':'rgba(255,255,255,0.45)';drawCurrentPickCanvas(ctx,picks[1],cols.current2,y+32);}
     if(locked&&i>0){ctx.fillStyle='rgba(255,255,255,0.45)';ctx.font='600 18px system-ui';ctx.fillText(`-${topPts-u.total}`,cols.diff,y+31);}
     y+=rowH;
   });
   if(rank.length>maxRows){ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.58)';ctx.font='600 22px system-ui';ctx.fillText(`+ ${rank.length-maxRows} participantes más`,W/2,y+26);}
-  ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · En curso = pick del partido vigente (2 columnas solo en Jornada 3) · Desempate: correctos, confirmados eliminación, exactos y fallados`,W/2,H-24);
+  ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · En curso = pick del partido vigente (2 columnas solo en Jornada 3) · Desempate: correctos, cruces bracket, exactos y fallados`,W/2,H-24);
   return await new Promise(resolve=>canvas.toBlob(resolve,'image/png',0.95));
 }
 
@@ -2994,8 +3008,8 @@ function buildRanking(){
          <td><span class="bs bs-stadium">${isLocked?u.realKOCorrect:'—'}</span></td>
          <td><span class="bs bs-r">${isLocked?u.miss:'—'}</span></td>
          <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>
-       ${getCurrentMatchItems().map(item=>{ const p=getUserPickForCurrent((getQ(qName)||{}).users?.[u.n],item); return `<td>${p?`<span class="current-pick">${p}</span>`:`<span class="current-pick missing">—</span>`}</td>`; }).join('')}
-        <td style="font-size:11px;">${(()=>{
+       ${getCurrentMatchItems().map(item=>{ const p=getUserPickForCurrent((getQ(qName)||{}).users?.[u.n],item); return `<td>${currentPickHtml(p)}</td>`; }).join('')}
+       <td style="font-size:11px;">${(()=>{
           if(u.locked===false) return '<span style="color:var(--muted)">—</span>';
           const q2=getQ(qName);
           const usr=q2&&q2.users[u.n];
@@ -3010,8 +3024,8 @@ function buildRanking(){
       </tbody>
     </table>
     </div>
-    <div style="padding:8px 14px;font-size:10px;color:var(--muted);">✔ Correctos grupos/bracket (incluye exactos) · 🏟️ Confirmados eliminación atinados · ✅ Exactos · vs 1° = diferencia con el líder</div>
-    </div>
+    <div style="padding:8px 14px;font-size:10px;color:var(--muted);">✔ Correctos grupos/bracket/120 min (incluye exactos) · 🏟️ Cruces de bracket atinados · ✅ Exactos · vs 1° = diferencia con el líder</div>
+</div>
   ${buildPointsChart(qName)}`;
 }
   function buildHomeRankingSection(qNames){
@@ -3058,13 +3072,13 @@ function buildPublicRankingCard(qName){
               <td><span class="bs bs-stadium">${isLocked?u.realKOCorrect:'—'}</span></td>
               <td><span class="bs bs-r">${isLocked?u.miss:'—'}</span></td>
               <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>
-            ${getCurrentMatchItems().map(item=>{ const p=getUserPickForCurrent((getQ(qName)||{}).users?.[u.n],item); return `<td>${p?`<span class="current-pick">${p}</span>`:`<span class="current-pick missing">—</span>`}</td>`; }).join('')}
+            ${getCurrentMatchItems().map(item=>{ const p=getUserPickForCurrent((getQ(qName)||{}).users?.[u.n],item); return `<td>${currentPickHtml(p)}</td>`; }).join('')}
             </tr>`;
           }).join('')}
         </tbody>
       </table>
     </div>
-    <div style="padding-top:8px;font-size:10px;color:var(--muted);">✅ Exacto +2pts · ✔ Ganador +1pt · 🏟️ confirmado eliminación atinado · toca un jugador para ver su detalle</div>
+    <div style="padding-top:8px;font-size:10px;color:var(--muted);">✅ Exacto grupos +2pts · ✔ Ganador/empate 120 min +1pt · 🏟️ cruce de bracket atinado · toca un jugador para ver su detalle</div>
     </div>`;
 }
 
@@ -3559,7 +3573,7 @@ function buildInstrucciones(){
           <span class="ibadge" style="background:rgba(220,50,50,0.2);color:#ff8a8a;border:1px solid rgba(220,50,50,0.3);padding:4px 8px;border-radius:20px;font-size:10px;">❌ 0 pts — resultado incorrecto</span>
         </div>
         <p style="margin:0;">Ejemplo: predices <em>México 2-1</em> → sale 2-1 = <strong style="color:#69ff6e;">+2 pts</strong> · sale 3-1 = <strong style="color:var(--gold);">+1 pt</strong> · sale 0-1 = <strong style="color:#ff8a8a;">0 pts</strong></p>
-<p style="margin:4px 0 0;font-size:11px;color:var(--muted);">En la predicción inicial de fase eliminatoria los marcadores no suman puntos; solo cuenta acertar el cruce. En los cruces reales confirmados: +1 por clasificado, +1 por marcador exacto y +1 por penales exactos si también atinaste el empate exacto.</p>
+<p style="margin:4px 0 0;font-size:11px;color:var(--muted);">En la predicción inicial de fase eliminatoria los marcadores no suman puntos; solo cuenta acertar el cruce. En los cruces reales confirmados: +1 por ganador/empate en 120 min, +1 por marcador exacto en 120 min y +1 por penales exactos solo si atinaste el empate exacto.</p>
 </div>
 
       <div class="instr-block"><h3>🎨 Colores en tu quiniela</h3>
@@ -4722,7 +4736,7 @@ window.EXPORT_EXCEL = function(qName) {
   const wb = XLSX.utils.book_new();
 
   // ── HOJA 1: RANKING ──────────────────────────────────────────
-  const rankData = [['#','Participante','Pts','Exactos (2pts)','Correctos','Confirmados eliminación atinados','Ganador sin exacto (1pt)','Fallados','Partidos jugados','Grupos bloqueado','Elim. bloqueado']];
+  const rankData = [['#','Participante','Pts','Exactos (2pts)','Correctos','Cruces bracket atinados','Ganador sin exacto (1pt)','Fallados','Partidos jugados','Grupos bloqueado','Elim. bloqueado']];
   const ranking = getRanking(qName);
   ranking.forEach((r, i) => {
     const u = q.users[r.n] || {};
