@@ -3688,7 +3688,24 @@ function allUsersLockedRealKOMatch(q, matchId){
 
   const stats=calcStats(preds,kopreds,{realkopreds:u.realkopreds||{}});
 
-  const groupRows=[[J1,'Jornada 1'],[J2,'Jornada 2'],[J3,'Jornada 3']].map(([jm,jl])=>`
+  function profilePenaltyDetail(pred){
+    if(!pred||!pred.pen) return '';
+    if(hasPenaltyScore(pred)){
+      const ph=parseInt(pred.ph,10), pa=parseInt(pred.pa,10);
+      const winner=ph>pa?'Local':'Visitante';
+      return `<div style="font-size:9px;color:#7aadff;margin-top:2px;line-height:1.2;font-weight:800;">Penales: ${ph}-${pa} · ${winner}</div>`;
+    }
+    return '<div style="font-size:9px;color:#7aadff;margin-top:2px;line-height:1.2;font-weight:800;">Marcó penales</div>';
+  }
+
+  function profileProjectedPenaltyDetail(pred, userH, userA){
+    if(!pred||pred.h===''||pred.h===undefined||pred.a===''||pred.a===undefined) return '';
+    if(parseInt(pred.h,10)!==parseInt(pred.a,10)||!pred.penWin) return '';
+    const winner=pred.penWin==='h'?userH:pred.penWin==='a'?userA:'';
+    return `<div style="font-size:9px;color:#7aadff;margin-top:2px;line-height:1.2;font-weight:800;">Se va a penales${winner?` · gana ${winner}`:''}</div>`;
+  }
+    
+    const groupRows=[[J1,'Jornada 1'],[J2,'Jornada 2'],[J3,'Jornada 3']].map(([jm,jl])=>`
     <tr><td colspan="6" style="padding:8px 6px 4px;font-size:10px;font-weight:800;color:var(--gold);background:rgba(255,215,0,0.05);">⚽ ${jl}</td></tr>
     ${jm.map(m=>matchRow(m,preds[m.id],realRes[m.id])).join('')}`).join('');
 
@@ -3699,8 +3716,8 @@ function allUsersLockedRealKOMatch(q, matchId){
     const userH=resolveKOTeam(m.hPos,preds,kopreds);
     const userA=resolveKOTeam(m.aPos,preds,kopreds);
     const winTeam=pred&&pred.h!==''?(parseInt(pred.h)>parseInt(pred.a)?userH:parseInt(pred.a)>parseInt(pred.h)?userA:(pred.penWin==='h'?userH:pred.penWin==='a'?userA:'—')):'—';
-    const predTxt=winTeam&&winTeam!=='—'?`Avanza ${winTeam}`:'—';
-    const realTxt=hasReal?`${real.h}-${real.a}`:'—';
+   const predTxt=winTeam&&winTeam!=='—'?`Avanza ${winTeam}${profileProjectedPenaltyDetail(pred,userH,userA)}`:'—';
+    const realTxt=hasReal?`${real.h}-${real.a}${penaltyText(real)}`:'—';
     let ptsBadge='';
     if((hasReal||real?.confirmed)&&pred){
       const actual=getActualKOTeams(m);
@@ -3725,8 +3742,8 @@ function allUsersLockedRealKOMatch(q, matchId){
     const teams=getActualKOTeams(m);
     const pred=(u.realkopreds||{})[m.id];
 const allLocked=allUsersLockedRealKOMatch(q,m.id);
-    const predTxt=allLocked&&pred&&pred.h!==''?`${pred.h}-${pred.a}`:'🔒 Oculto';
-    const realTxt=hasReal?`${real.h}-${real.a}`:(real&&real.confirmed?'Confirmado':'—');
+    const predTxt=allLocked&&pred&&pred.h!==''?`${pred.h}-${pred.a}${profilePenaltyDetail(pred)}`:'🔒 Oculto';
+    const realTxt=hasReal?`${real.h}-${real.a}${penaltyText(real)}`:(real&&real.confirmed?'Confirmado':'—');
     let ptsBadge='';
     if(allLocked&&hasReal&&pred&&pred.h!==''){
       const sc=scoreRealKOPrediction(pred,real);
