@@ -1423,7 +1423,7 @@ function hasPenaltyScore(item){
   return !!(item&&item.pen&&item.ph!==''&&item.ph!==undefined&&item.pa!==''&&item.pa!==undefined&&!isNaN(parseInt(item.ph))&&!isNaN(parseInt(item.pa))&&parseInt(item.ph)!==parseInt(item.pa));
 }
 function penaltyText(item){
-  return hasPenaltyScore(item)?` (Pen. ${item.ph}-${item.pa})`:'';
+  return hasPenaltyScore(item)?` (Penales ${item.ph}-${item.pa})`:'';
 }
 
   function scoreRealKOPrediction(pred, real){
@@ -2493,8 +2493,9 @@ function buildResCard(m,r,isKO=false){
   (KO_MATCHES||[]).forEach((m,idx)=>{
     const r=(R.koresults||{})[m.id];
     if(r&&r.h!==''&&r.h!==undefined&&r.a!==''&&r.a!==undefined){
-      const teamH=resolveKOTeam(m.hPos,R.results||{},R.koresults||{});
-      const teamA=resolveKOTeam(m.aPos,R.results||{},R.koresults||{});
+       const ov=(R.kooverrides||{})[m.id]||{};
+      const teamH=ov.h||resolveKOTeam(m.hPos,R.results||{},R.koresults||{});
+      const teamA=ov.a||resolveKOTeam(m.aPos,R.results||{},R.koresults||{});
       items.push({type:'ko',match:m,result:r,teamH:teamH==='?'?'Por definir':teamH,teamA:teamA==='?'?'Por definir':teamA,order:1000+idx,ts:r._ts||0});
     }
   });
@@ -2724,8 +2725,9 @@ window.SHARE_RANKING=async qName=>{
   (KO_MATCHES||[]).forEach((m,idx)=>{
     const r=(R.koresults||{})[m.id];
     if(r&&r.h!==''&&r.h!==undefined&&r.a!==''&&r.a!==undefined){
-      const teamH=resolveKOTeam(m.hPos,R.results||{},R.koresults||{});
-      const teamA=resolveKOTeam(m.aPos,R.results||{},R.koresults||{});
+     const ov=(R.kooverrides||{})[m.id]||{};
+      const teamH=ov.h||resolveKOTeam(m.hPos,R.results||{},R.koresults||{});
+      const teamA=ov.a||resolveKOTeam(m.aPos,R.results||{},R.koresults||{});
       items.push({type:'ko',match:m,result:r,teamH:teamH==='?'?'Por definir':teamH,teamA:teamA==='?'?'Por definir':teamA,order:1000+idx,ts:r._ts||0});
     }
   });
@@ -2774,8 +2776,9 @@ function getCurrentMatchItem(now=new Date()){
   const items=[...ALL.map((m,idx)=>({type:'group',match:m,teamH:m.h,teamA:m.a,order:idx,start:getMatchStart(m)})),
     ...KO_MATCHES.map((m,idx)=>{
       const R=getResults();
-      const teamH=resolveKOTeam(m.hPos,R.results||{},R.koresults||{});
-      const teamA=resolveKOTeam(m.aPos,R.results||{},R.koresults||{});
+       const ov=(R.kooverrides||{})[m.id]||{};
+      const teamH=ov.h||resolveKOTeam(m.hPos,R.results||{},R.koresults||{});
+      const teamA=ov.a||resolveKOTeam(m.aPos,R.results||{},R.koresults||{});
       return {type:'ko',match:m,teamH:teamH==='?'?'Por definir':teamH,teamA:teamA==='?'?'Por definir':teamA,order:1000+idx,start:getMatchStart(m)};
     })
   ].filter(x=>x.start).sort((a,b)=>a.start-b.start||a.order-b.order);
@@ -4281,6 +4284,7 @@ window.SKR=(id,side,val)=>{_realThirdsCache=null;
   if(!R.koresults)R.koresults={};
   if(!R.koresults[id])R.koresults[id]={h:'',a:''};
   R.koresults[id][side]=val===''?'':(parseInt(val)>=0?parseInt(val):0);
+   R.koresults[id]._ts=Date.now();                          
 };
 window.TAKR_PEN=(id,checked)=>{_realThirdsCache=null;
   const R=getResults();
@@ -4288,6 +4292,7 @@ window.TAKR_PEN=(id,checked)=>{_realThirdsCache=null;
   if(!R.koresults[id])R.koresults[id]={h:'',a:''};
   R.koresults[id].pen=!!checked;
   if(!checked){delete R.koresults[id].ph;delete R.koresults[id].pa;}
+  R.koresults[id]._ts=Date.now();
   save();
   render();
 };
@@ -4297,6 +4302,7 @@ window.SKR_PEN=(id,side,val)=>{_realThirdsCache=null;
   if(!R.koresults[id])R.koresults[id]={h:'',a:''};
   R.koresults[id].pen=true;
   R.koresults[id][side]=val===''?'':(parseInt(val)>=0?parseInt(val):0);
+  R.koresults[id]._ts=Date.now();
 };
   window.SAKR=btn=>{
   _realThirdsCache=null;
