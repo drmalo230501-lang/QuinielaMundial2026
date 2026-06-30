@@ -1399,8 +1399,8 @@ function resolveKOTeam(pos, preds, koPreds){
     const ht=resolveKOTeam(km.hPos,preds,koPreds);
     const at=resolveKOTeam(km.aPos,preds,koPreds);
     if(rh>ra) return at;
+        if(ra>rh) return ht;
     return kr.penWin==='h'||scoreSideWinner(kr)==='h'?at:kr.penWin==='a'||scoreSideWinner(kr)==='a'?ht:'?';
-    return kr.penWin==='h'?at:kr.penWin==='a'?ht:'?';
   }
   return pos;
 }
@@ -1523,7 +1523,7 @@ function calcStats(preds, kopreds, opts={}){  const R=getResults();
 // Real confirmed KO predictions: +1 outcome in 120 minutes (win/draw), +1 exact 120-minute score, +1 exact penalties (only after exact draw score).
                                             const realkopreds=opts.realkopreds||{};
   for(const m of KO_MATCHES){
-    if(opts.excludeType==='realko'&&opts.excludeId===m.id) continue;
+    if((opts.excludeType==='realko'&&opts.excludeId===m.id)||opts.excludeRealKOId===m.id) continue;
     const real=realKO[m.id];
     if(!real||real.h===''||real.h===undefined||real.a===''||real.a===undefined) continue;
     const pred=realkopreds[m.id];
@@ -1561,8 +1561,8 @@ function assignRankingPositions(ranked){
   const q=getQ(quinielaName); if(!q||!latest) return {};
   const excludeType=latest.type==='ko'?'ko':'group';
   const prevRank=Object.entries(q.users||{}).filter(([,u])=>u.locked)
-    .map(([n,u])=>({n,...calcStats(u.preds||{},u.kopreds||{},{excludeType,excludeId:latest.match.id,realkopreds:u.realkopreds||{}}),locked:true}))
-   .sort(compareRankingStats);
+    .map(([n,u])=>({n,...calcStats(u.preds||{},u.kopreds||{},{excludeType,excludeId:latest.match.id,excludeRealKOId:latest.type==='ko'?latest.match.id:null,realkopreds:u.realkopreds||{}}),locked:true}))
+    .sort(compareRankingStats);
   assignRankingPositions(prevRank);
   const prevPos={};
 prevRank.forEach(u=>prevPos[u.n]=u.rankPos);
@@ -2522,7 +2522,7 @@ function buildLatestResultCard(){
     <div class="latest-result-label">⚽ Último resultado publicado</div>
     <div class="latest-result-main">
       <div class="latest-result-team"><span class="latest-result-flag">${F(item.teamH)}</span><strong>${item.teamH}</strong></div>
-      <div class="latest-result-score">${rh} - ${ra}</div>
+      <div class="latest-result-score">${rh} - ${ra}${penaltyText(item.result)}</div>
       <div class="latest-result-team"><span class="latest-result-flag">${F(item.teamA)}</span><strong>${item.teamA}</strong></div>
     </div>
     <div class="latest-result-meta">${formatLatestResultMeta(item)}</div>
@@ -2608,7 +2608,7 @@ function _drawLatestResultCanvas(ctx,latest,cardX,cardY,cardW){
   const leftW=Math.max(120,leftX2-leftX1);
   const rightW=Math.max(120,rightX2-rightX1);
   const teamY=cardY+68;
-  const scoreText=`${latest.result.h} - ${latest.result.a}`;
+  const scoreText=`${latest.result.h} - ${latest.result.a}${penaltyText(latest.result)}`;
   _drawLatestResultTeam(ctx,F(latest.teamH),latest.teamH,leftX1+(leftW/2),teamY,leftW);
   _drawLatestResultScore(ctx,scoreText,scoreX,cardY+90,scoreW);
   _drawLatestResultTeam(ctx,F(latest.teamA),latest.teamA,rightX1+(rightW/2),teamY,rightW);
@@ -2857,7 +2857,7 @@ function buildLatestResultCard(){
       <div class="latest-result-label">${label}</div>
       <div class="latest-result-main">
         <div class="latest-result-team"><span class="latest-result-flag">${F(item.teamH)}</span><strong>${item.teamH}</strong></div>
-        <div class="latest-result-score">${rh} - ${ra}</div>
+        <div class="latest-result-score">${rh} - ${ra}${penaltyText(item.result)}</div>
         <div class="latest-result-team"><span class="latest-result-flag">${F(item.teamA)}</span><strong>${item.teamA}</strong></div>
       </div>
       <div class="latest-result-meta">${formatLatestResultMeta(item)}</div>
@@ -3317,9 +3317,15 @@ function buildAdminKOResults(){
     return adminTeamHasPlayed(th)||adminTeamHasPlayed(ta);
   }
   const d16Vis=KO_MATCHES.filter(m=>m.round==='D16').some(m=>adminShouldShowKO(m));
-  const r16Vis=KO_MATCHES.filter(m=>m.round==='R16').some(m=>{const r=realKO[m.id];return r&&r.h!==''});
-  const qfVis=KO_MATCHES.filter(m=>m.round==='QF').some(m=>{const r=realKO[m.id];return r&&r.h!==''});
-  const sfVis=KO_MATCHES.filter(m=>m.round==='SF').some(m=>{const r=realKO[m.id];return r&&r.h!==''});
+ const roundHasReadyMatch=round=>KO_MATCHES.filter(m=>m.round===round).some(m=>{
+    const r=realKO[m.id];
+    if(r&&r.h!==''&&r.h!==undefined) return true;
+    const th=resolveReal(m.hPos), ta=resolveReal(m.aPos);
+    return th!=='?'&&ta!=='?';
+  });
+  const r16Vis=roundHasReadyMatch('R16');
+  const qfVis=roundHasReadyMatch('QF');
+  const sfVis=roundHasReadyMatch('SF');
   const roundVis={'D16':d16Vis,'R16':r16Vis,'QF':qfVis,'SF':sfVis,'3P':sfVis,'FIN':sfVis};
 
   if(!d16Vis) return `<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">
@@ -4377,7 +4383,9 @@ window.CONFIRM_KO_MATCH=async id=>{
   if(!R.koresults[id]) R.koresults[id]={h:'',a:''};
   const r=R.koresults[id];
   if(r.pen&&!hasPenaltyScore(r)){alert('Captura un marcador de penales válido, sin empate, antes de confirmar.');return;}
+  if(parseInt(r.h)===parseInt(r.a)&&!hasPenaltyScore(r)){alert('Si el partido terminó empatado, activa penales y captura un marcador de penales válido para definir quién avanzó.');return;}
   R.koresults[id].confirmed=true;
+  R.koresults[id]._ts=Date.now();
   await saveNow();
   showToast('🔓 Partido confirmado y desbloqueado para usuarios','info',3000);
   render();
