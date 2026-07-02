@@ -1491,15 +1491,15 @@ function getAchievements(preds, kopreds){
 function calcStats(preds, kopreds, opts={}){  const R=getResults();
   const realRes=R.results||{};
   const realKO=R.koresults||{};
-  let total=0,exact=0,winner=0,miss=0,played=0,realKOCorrect=0;
+  let total=0,exact=0,winner=0,miss=0,played=0,realKOCorrect=0,correct=0;
     // Groups keep original scoring: +2 exact, +1 winner.
   for(const m of ALL){
      if(opts.excludeType==='group'&&opts.excludeId===m.id) continue;
     const res=matchResult(preds[m.id],realRes[m.id]);
     if(res==='pending') continue;
     played++;
-    if(res==='exact'){exact++;total+=2;}
-    else if(res==='winner'){winner++;total+=1;}
+    if(res==='exact'){exact++;correct++;total+=2;}
+    else if(res==='winner'){winner++;correct++;total+=1;}
     else miss++;
   }
   // Initial KO bracket: scores no longer count. Award only +1 if both teams in the predicted matchup match the real matchup.
@@ -1532,16 +1532,16 @@ function calcStats(preds, kopreds, opts={}){  const R=getResults();
     played++;
     total+=sc.points;
     if(sc.exactScore) exact++;
-    if(sc.classified) winner++;
+    if(sc.classified){winner++;correct++;}
     if(sc.points===0) miss++;
   }
- return{total,exact,winner,miss,played,realKOCorrect,correct:exact+winner};
+ return{total,exact,winner,miss,played,realKOCorrect,correct};
                                            }
 function compareRankingStats(a,b){
-  return b.total-a.total||b.correct-a.correct||b.realKOCorrect-a.realKOCorrect||b.exact-a.exact||a.miss-b.miss;
+  return b.total-a.total||b.correct-a.correct||b.exact-a.exact||b.realKOCorrect-a.realKOCorrect||a.miss-b.miss;
 }
 function sameRankingStats(a,b){
-  return !!a&&!!b&&a.total===b.total&&a.correct===b.correct&&a.realKOCorrect===b.realKOCorrect&&a.exact===b.exact&&a.miss===b.miss;
+  return !!a&&!!b&&a.total===b.total&&a.correct===b.correct&&a.exact===b.exact&&a.realKOCorrect===b.realKOCorrect&&a.miss===b.miss;
 }
 function assignRankingPositions(ranked){
   let lastLockedRank=0;
@@ -2696,7 +2696,7 @@ async function createRankingImageBlob(qName){
     y+=rowH;
   });
   if(rank.length>maxRows){ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.58)';ctx.font='600 22px system-ui';ctx.fillText(`+ ${rank.length-maxRows} participantes más`,W/2,y+26);}
-ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · En curso = pick del partido vigente (2 columnas solo en Jornada 3) · Desempate: correctos, cruces bracket, exactos y fallados`,W/2,H-24);
+ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · En curso = pick del partido vigente (2 columnas solo en Jornada 3) · Desempate: correctos, exactos, cruces bracket y fallados`,W/2,H-24);
   return await new Promise(resolve=>canvas.toBlob(resolve,'image/png',0.95));
 }
 
@@ -2939,7 +2939,7 @@ async function createRankingImageBlob(qName){
     y+=rowH;
   });
   if(rank.length>maxRows){ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.58)';ctx.font='600 22px system-ui';ctx.fillText(`+ ${rank.length-maxRows} participantes más`,W/2,y+26);}
-  ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · En curso = pick del partido vigente (2 columnas solo en Jornada 3) · Desempate: correctos, cruces bracket, exactos y fallados`,W/2,H-24);
+  ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,0.42)';ctx.font='500 18px system-ui';ctx.fillText(`Generado ${new Date().toLocaleString('es-MX')} · En curso = pick del partido vigente (2 columnas solo en Jornada 3) · Desempate: correctos, exactos, cruces bracket y fallados`,W/2,H-24);
   return await new Promise(resolve=>canvas.toBlob(resolve,'image/png',0.95));
 }
 
