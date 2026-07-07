@@ -186,6 +186,25 @@ body.light-mode .alert-w{background:rgba(255,193,7,0.15);color:#6d4c00;}
 .home-ranking-title::after{content:'';flex:1;height:1px;background:rgba(255,215,0,0.25);}
 .home-ranking-note{font-size:10px;color:var(--muted);line-height:1.4;margin:-2px 0 10px;}
 
+/* LEADER PODIUM */
+.podium-card{margin:10px;border:1px solid rgba(255,215,0,0.24);border-radius:18px;padding:14px 12px;background:radial-gradient(circle at 50% 0%,rgba(255,215,0,0.18),rgba(26,110,245,0.08) 42%,rgba(255,255,255,0.03));overflow:hidden;}
+.podium-title{font-size:13px;font-weight:900;color:var(--gold);text-align:center;margin-bottom:12px;letter-spacing:.3px;}
+.podium-stage{display:grid;grid-template-columns:1fr 1.15fr 1fr;align-items:end;gap:8px;min-height:178px;}
+.podium-slot{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;min-width:0;}
+.podium-avatar{width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:25px;background:rgba(255,255,255,0.09);border:2px solid rgba(255,255,255,0.18);box-shadow:0 8px 20px rgba(0,0,0,0.28);margin-bottom:7px;}
+.podium-slot.first .podium-avatar{width:72px;height:72px;font-size:34px;border-color:rgba(255,215,0,0.72);box-shadow:0 0 24px rgba(255,215,0,0.3);}
+.podium-name{font-size:10px;font-weight:900;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+.podium-points{font-size:10px;color:var(--gold);font-weight:900;margin:2px 0 6px;}
+.podium-block{width:100%;border-radius:12px 12px 6px 6px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:1000;color:#10103a;position:relative;box-shadow:inset 0 1px 0 rgba(255,255,255,0.45),0 8px 22px rgba(0,0,0,0.24);}
+.podium-slot.first .podium-block{height:92px;background:linear-gradient(180deg,#ffe980,#d99c00);font-size:36px;}
+.podium-slot.second .podium-block{height:68px;background:linear-gradient(180deg,#f2f6ff,#8c9bb6);}
+.podium-slot.third .podium-block{height:52px;background:linear-gradient(180deg,#ffc47f,#a45a20);}
+.podium-champ{font-size:9px;color:var(--muted);text-align:center;min-height:14px;margin-bottom:4px;}
+.world-champion-card{margin:0 10px 10px;padding:14px;border:1px solid rgba(255,215,0,0.45);border-radius:16px;background:linear-gradient(135deg,rgba(255,215,0,0.22),rgba(0,200,83,0.10));text-align:center;}
+.world-champion-label{font-size:10px;font-weight:900;color:var(--gold);letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;}
+.world-champion-name{font-size:20px;font-weight:1000;color:#fff;}
+
+
 
   .current-match-card{margin:0 10px 10px;padding:12px;border:1px solid rgba(0,200,83,0.35);border-radius:14px;background:linear-gradient(135deg,rgba(0,200,83,0.12),rgba(26,110,245,0.08));}
 .current-match-label{font-size:10px;font-weight:800;color:#69ff6e;letter-spacing:.4px;text-transform:uppercase;margin-bottom:7px;}
@@ -1535,6 +1554,13 @@ function calcStats(preds, kopreds, opts={}){  const R=getResults();
     if(sc.classified){winner++;correct++;}
     if(sc.points===0) miss++;
   }
+
+  const predictedChampion=getUserChampion({preds,kopreds,locked:true});
+  const realChampion=getRealChampion();
+  if(predictedChampion&&realChampion&&predictedChampion===realChampion&&!(opts.excludeType==='ko'&&opts.excludeId==='p104')&&!opts.excludeChampionBonus){
+    total+=1;
+    correct+=1;
+  }                                           
  return{total,exact,winner,miss,played,realKOCorrect,correct};
                                            }
 function compareRankingStats(a,b){
@@ -2961,6 +2987,33 @@ window.SHARE_RANKING=async qName=>{
     showToast('⚠️ No se pudo compartir la imagen del ranking','miss',3500);
   }
 };
+
+
+  function championCellHtml(user, qName){
+  if(!user||user.locked===false) return '<span style="color:var(--muted)">—</span>';
+  const q=getQ(qName);
+  const usr=q&&q.users[user.n];
+  const champ=usr?getUserChampion(usr):null;
+  const realChamp=getRealChampion();
+  if(!champ) return '<span style="color:var(--muted)">—</span>';
+  const correct=realChamp&&champ===realChamp;
+  const wrong=realChamp&&champ!==realChamp;
+  return `<span style="color:${correct?'#69ff6e':wrong?'#ff8a8a':'#fff'};white-space:nowrap;">${F(champ)} ${champ}${correct?' +1':''}</span>`;
+}
+function buildWorldChampionCard(){
+  const champ=getRealChampion();
+  if(!champ) return '';
+  return `<div class="world-champion-card"><div class="world-champion-label">🌎 Campeón del mundo</div><div class="world-champion-name">${F(champ)} ${champ}</div></div>`;
+}
+function buildPodium(qName){
+  const top=getRanking(qName).filter(u=>u.locked!==false).slice(0,3);
+  if(!top.length) return '';
+  const byPlace=[top[1],top[0],top[2]];
+  const classes=['second','first','third'];
+  const nums=['2','1','3'];
+  const icons=['🥈','🏆','🥉'];
+  return `<div class="podium-card"><div class="podium-title">🏟️ Podio en vivo · Top 3</div><div class="podium-stage">${byPlace.map((u,i)=>u?`<div class="podium-slot ${classes[i]}"><div class="podium-avatar">${icons[i]}</div><div class="podium-name">${u.n}</div><div class="podium-points">${u.total} pts</div><div class="podium-champ">${championCellHtml(u,qName)}</div><div class="podium-block">${nums[i]}</div></div>`:`<div class="podium-slot ${classes[i]}"><div class="podium-avatar">✨</div><div class="podium-name">Vacante</div><div class="podium-points">—</div><div class="podium-champ">—</div><div class="podium-block">${nums[i]}</div></div>`).join('')}</div></div>`;
+}
   
 // ===================== RANKING =====================
 function buildRanking(){
@@ -2981,6 +3034,7 @@ function buildRanking(){
     </div>
      ${buildCurrentMatchCard()}
      ${buildLatestResultCard()}
+         ${buildWorldChampionCard()}
     <div class="ranking-actions">
       <button class="btn btn-primary" onclick="SHARE_RANKING(decodeURIComponent('${encodeURIComponent(qName)}'))">📤 Compartir ranking</button>
     </div>
@@ -3018,23 +3072,14 @@ function buildRanking(){
          <td><span class="bs bs-r">${isLocked?u.miss:'—'}</span></td>
          <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>
        ${getCurrentMatchItems().map(item=>{ const p=getUserPickForCurrent((getQ(qName)||{}).users?.[u.n],item); return `<td>${currentPickHtml(p)}</td>`; }).join('')}
-       <td style="font-size:11px;">${(()=>{
-          if(u.locked===false) return '<span style="color:var(--muted)">—</span>';
-          const q2=getQ(qName);
-          const usr=q2&&q2.users[u.n];
-          const champ=usr?getUserChampion(usr):null;
-          const realChamp=getRealChampion();
-          if(!champ) return '<span style="color:var(--muted)">—</span>';
-          const correct=realChamp&&champ===realChamp;
-          const wrong=realChamp&&champ!==realChamp;
-          return `<span style="color:${correct?'#69ff6e':wrong?'#ff8a8a':'#fff'}">${F(champ)} ${champ}</span>`;
-        })()}</td>
+              <td style="font-size:11px;">${championCellHtml(u,qName)}</td>
       </tr>`;}).join('')}
       </tbody>
     </table>
     </div>
-    <div style="padding:8px 14px;font-size:10px;color:var(--muted);">✔ Correctos grupos/bracket/120 min (incluye exactos) · 🏟️ Cruces de bracket atinados · ✅ Exactos · vs 1° = diferencia con el líder</div>
-</div>
+    <div style="padding:8px 14px;font-size:10px;color:var(--muted);">✔ Correctos grupos/bracket/120 min (incluye exactos) · 🏟️ Cruces de bracket atinados · ✅ Exactos · 🏆 campeón real +1 · vs 1° = diferencia con el líder</div>
+    </div>
+      ${buildPodium(qName)}
   ${buildPointsChart(qName)}`;
 }
   function buildHomeRankingSection(qNames){
@@ -3058,16 +3103,17 @@ function buildPublicRankingCard(qName){
     </div>
     ${buildCurrentMatchCard()}
     ${buildLatestResultCard()}
+        ${buildWorldChampionCard()}
     <div class="ranking-actions" style="padding:0 0 10px;">
       <button class="btn btn-primary btn-sm" onclick="SHARE_RANKING(decodeURIComponent('${encodeURIComponent(qName)}'))">📤 Compartir imagen</button>
     </div>
     <div style="overflow-x:auto;">
       <table class="rank-table">
         <thead><tr>
-         <th>#</th><th style="text-align:left;">Jugador</th><th>Pts</th><th>✅</th><th>✔</th><th>🏟️</th><th>❌</th><th>vs 1°</th>${getCurrentMatchItems().length>1?'<th>En curso 1</th><th>En curso 2</th>':'<th>En curso</th>'}
+         <th>#</th><th style="text-align:left;">Jugador</th><th>Pts</th><th>✅</th><th>✔</th><th>🏟️</th><th>❌</th><th>vs 1°</th>${getCurrentMatchItems().length>1?'<th>En curso 1</th><th>En curso 2</th>':'<th>En curso</th>'}<th>🏆 Campeón</th>
          </tr></thead>
         <tbody>
-          ${rank.length===0?`<tr><td colspan="${getCurrentMatchItems().length>1?10:9}" style="text-align:center;color:var(--muted);padding:16px;">Sin participantes guardados</td></tr>`:
+          ${rank.length===0?`<tr><td colspan="${getCurrentMatchItems().length>1?11:10}" style="text-align:center;color:var(--muted);padding:16px;">Sin participantes guardados</td></tr>`:
             rank.map((u,i)=>{
             const isLocked=u.locked!==false;
             const rowCls=isLocked?(i===0?'top1':i===1?'top2':i===2?'top3':''):'';
@@ -3082,12 +3128,14 @@ function buildPublicRankingCard(qName){
               <td><span class="bs bs-r">${isLocked?u.miss:'—'}</span></td>
               <td class="${i===0?'diff-zero':'diff-red'}">${!isLocked?'—':i===0?'—':topPts-u.total===0?'—':'-'+(topPts-u.total)}</td>
             ${getCurrentMatchItems().map(item=>{ const p=getUserPickForCurrent((getQ(qName)||{}).users?.[u.n],item); return `<td>${currentPickHtml(p)}</td>`; }).join('')}
+                          <td style="font-size:11px;">${championCellHtml(u,qName)}</td>
             </tr>`;
           }).join('')}
         </tbody>
       </table>
     </div>
-    <div style="padding-top:8px;font-size:10px;color:var(--muted);">✅ Exacto grupos +2pts · ✔ Ganador/empate 120 min +1pt · 🏟️ cruce de bracket atinado · toca un jugador para ver su detalle</div>
+ <div style="padding-top:8px;font-size:10px;color:var(--muted);">✅ Exacto grupos +2pts · ✔ Ganador/empate 120 min +1pt · 🏟️ cruce de bracket atinado · 🏆 campeón real +1 · toca un jugador para ver su detalle</div>
+    ${buildPodium(qName)}
     </div>`;
 }
 
@@ -3638,10 +3686,11 @@ function getUserChampion(u){
   const fp=kopreds[finMatch.id];
   if(!fp||fp.h==='') return null;
   const rh=parseInt(fp.h),ra=parseInt(fp.a);
-  if(isNaN(rh)||isNaN(ra)||rh===ra) return null;
+  if(isNaN(rh)||isNaN(ra)) return null;
   const ht=resolveKOTeam(finMatch.hPos,preds,kopreds);
   const at=resolveKOTeam(finMatch.aPos,preds,kopreds);
-  return rh>ra?ht:at;
+  const side=scoreSideWinner(fp);
+  return side==='h'?ht:side==='a'?at:null;
 }
 
 function getRealChampion(){
@@ -3653,10 +3702,11 @@ function getRealChampion(){
   const fp=realKO[finMatch.id];
   if(!fp||fp.h==='') return null;
   const rh=parseInt(fp.h),ra=parseInt(fp.a);
-  if(isNaN(rh)||isNaN(ra)||rh===ra) return null;
+  if(isNaN(rh)||isNaN(ra)) return null;
   const ht=resolveKOTeam(finMatch.hPos,realRes,realKO);
   const at=resolveKOTeam(finMatch.aPos,realRes,realKO);
-  return rh>ra?ht:at;
+const side=scoreSideWinner(fp);
+  return side==='h'?ht:side==='a'?at:null;
 }
 
 function allUsersLockedRealKOMatch(q, matchId){
