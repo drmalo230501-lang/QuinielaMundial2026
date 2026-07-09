@@ -3717,6 +3717,13 @@ function allUsersLockedRealKOMatch(q, matchId){
     return !!(pred&&pred.h!==''&&pred.h!==undefined&&pred.a!==''&&pred.a!==undefined&&user.realkolocks&&user.realkolocks[matchId]);
   });
 }
+function hasMatchStarted(m, now=new Date()){
+  const start=getMatchStart(m);
+  return !!(start&&now>=start);
+}
+function realKOMatchPredictionsVisible(q, m){
+  return allUsersLockedRealKOMatch(q,m.id)||hasMatchStarted(m);
+}
   
   window.VIEW_PROFILE=function(playerName, qName){
   const q=getQ(qName); if(!q) return;
@@ -3806,16 +3813,16 @@ function allUsersLockedRealKOMatch(q, matchId){
     const hasReal=real&&real.h!==''&&real.h!==undefined;
     const teams=getActualKOTeams(m);
     const pred=(u.realkopreds||{})[m.id];
-const allLocked=allUsersLockedRealKOMatch(q,m.id);
-    const predTxt=allLocked&&pred&&pred.h!==''?`${pred.h}-${pred.a}${profilePenaltyDetail(pred)}`:'🔒 Oculto';
+const predictionsVisible=realKOMatchPredictionsVisible(q,m);
+    const predTxt=predictionsVisible&&pred&&pred.h!==''?`${pred.h}-${pred.a}${profilePenaltyDetail(pred)}`:'🔒 Oculto';
     const realTxt=hasReal?`${real.h}-${real.a}${penaltyText(real)}`:(real&&real.confirmed?'Confirmado':'—');
     let ptsBadge='';
-    if(allLocked&&hasReal&&pred&&pred.h!==''){
+    if(predictionsVisible&&hasReal&&pred&&pred.h!==''){
       const sc=scoreRealKOPrediction(pred,real);
       ptsBadge=realKOPointsBadge(sc);
     }
     const rowBg=ptsBadge.includes('rb-exact')?'rgba(0,200,83,0.08)':ptsBadge.includes('rb-winner')?'rgba(255,215,0,0.06)':ptsBadge.includes('rb-miss')?'rgba(220,50,50,0.07)':'';
-   const privacyNote=allLocked?'':'<div style="font-size:9px;color:var(--muted);margin-top:2px;line-height:1.2;">Visible cuando todos bloqueen</div>';
+    const privacyNote=predictionsVisible?'':'<div style="font-size:9px;color:var(--muted);margin-top:2px;line-height:1.2;">Visible cuando todos bloqueen o cuando inicie el partido</div>';
     return `<tr style="background:${rowBg};border-bottom:1px solid rgba(255,255,255,0.04);">
       <td style="padding:5px 6px;font-size:10px;color:var(--muted);">${m.label}</td>
       <td style="padding:5px 6px;font-size:10px;">${F(teams.h)} ${(teams.h||'').slice(0,8)}</td>
