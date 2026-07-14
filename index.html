@@ -3428,8 +3428,8 @@ function buildAdminKOResults(){
               ${pens?`<div class="ko-score-row" style="margin-top:6px;justify-content:center;"><input type="number" class="ko-score-inp" style="width:34px;height:30px;font-size:13px;" min="0" max="20" value="${rph}" oninput="SKR_PEN('${m.id}','ph',this.value)" inputmode="numeric" pattern="[0-9]*" /><span class="ko-vs">pen</span><input type="number" class="ko-score-inp" style="width:34px;height:30px;font-size:13px;" min="0" max="20" value="${rpa}" oninput="SKR_PEN('${m.id}','pa',this.value)" inputmode="numeric" pattern="[0-9]*" /></div>`:''}
             </div>`:`<span style="font-size:10px;color:var(--muted);">Pendiente</span>`}
             ${hasR?`<span class="mcard-result-badge rb-winner" style="margin-top:3px;">✅ Guardado</span>`:''}
-             ${readyFinal?`<button onclick="CONFIRM_KO_MATCH('${m.id}')" style="margin-top:4px;font-size:9px;padding:2px 7px;border-radius:8px;border:1px solid ${r.confirmed?'rgba(0,200,83,0.45)':'rgba(255,215,0,0.3)'};background:${r.confirmed?'rgba(0,200,83,0.12)':'rgba(255,215,0,0.08)'};color:${r.confirmed?'#69ff6e':'var(--gold)'};cursor:pointer;">${r.confirmed?'✅ Partido confirmado':'🔓 Confirmar partido'}</button>${r.confirmed&&!S.isCoadmin?`<button onclick="ADMIN_UNLOCK_REAL_KO('${m.id}')" style="margin-top:4px;font-size:9px;padding:2px 7px;border-radius:8px;border:1px solid rgba(100,150,255,0.4);background:rgba(100,150,255,0.12);color:#7aadff;cursor:pointer;">🔓 Desbloquear usuario</button>`:''}`:''}
-            ${S.isCoadmin?'':
+             ${readyFinal?`<button onclick="CONFIRM_KO_MATCH('${m.id}')" style="margin-top:4px;font-size:9px;padding:2px 7px;border-radius:8px;border:1px solid ${r.confirmed?'rgba(0,200,83,0.45)':'rgba(255,215,0,0.3)'};background:${r.confirmed?'rgba(0,200,83,0.12)':'rgba(255,215,0,0.08)'};color:${r.confirmed?'#69ff6e':'var(--gold)'};cursor:pointer;">${r.confirmed?'✅ Partido confirmado':'🔓 Confirmar partido'}</button><button onclick="ADMIN_VIEW_REAL_KO_PREDS('${m.id}')" title="Ver pronósticos capturados de participantes para este partido" style="margin-top:4px;font-size:9px;padding:2px 7px;border-radius:8px;border:1px solid rgba(122,173,255,0.42);background:rgba(122,173,255,0.13);color:#7aadff;cursor:pointer;">👁️ Ver picks</button>${r.confirmed&&!S.isCoadmin?`<button onclick="ADMIN_UNLOCK_REAL_KO('${m.id}')" style="margin-top:4px;font-size:9px;padding:2px 7px;border-radius:8px;border:1px solid rgba(100,150,255,0.4);background:rgba(100,150,255,0.12);color:#7aadff;cursor:pointer;">🔓 Desbloquear usuario</button>`:''}`:''}
+             ${S.isCoadmin?'':
             `<button onclick="OPEN_OVERRIDE('${m.id}','${dispH||''}','${dispA||''}')"
               style="margin-top:4px;font-size:9px;padding:2px 7px;border-radius:8px;border:1px solid rgba(255,215,0,0.3);background:rgba(255,215,0,0.08);color:var(--gold);cursor:pointer;">
               ✏️ ${hasOverride?'Editar equipos':'Forzar equipos'}
@@ -4494,6 +4494,49 @@ window.UUK_REAL_ALL_USERS=async qn=>{
   showToast('🔓 Partidos de eliminación desbloqueados para todos los usuarios','info',3500);
   render();
 };
+
+  window.ADMIN_VIEW_REAL_KO_PREDS=id=>{
+  const match=KO_MATCHES.find(m=>m.id===id);
+  if(!match){alert('Partido no encontrado.');return;}
+  const qNames=S.adminQ?[S.adminQ]:Object.keys(S.quinielas).filter(k=>k!=='__results__'&&k!=='__coadmins__');
+  const rows=[];
+  let missing=0;
+  qNames.forEach(qn=>{
+    const q=getQ(qn);
+    if(!q||!q.users) return;
+    Object.entries(q.users).forEach(([name,u])=>{
+      const p=(u.realkopreds||{})[id];
+      const hasPick=p&&p.h!==''&&p.h!==undefined&&p.a!==''&&p.a!==undefined;
+      if(!hasPick){ missing++; return; }
+      rows.push({qn,name,p,locked:!!(u.realkolocks&&u.realkolocks[id])});
+    });
+  });
+  const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const predLabel=p=>{
+    const base=`${esc(p.h)} - ${esc(p.a)}`;
+    if(p.pen) return `${base}<div style="font-size:10px;color:#7aadff;margin-top:2px;">Pen: ${esc(p.ph??'')} - ${esc(p.pa??'')}</div>`;
+    return base;
+  };
+  const modal=document.createElement('div');
+  modal.id='admin-real-ko-preds-modal';
+  const prev=document.getElementById(modal.id); if(prev) prev.remove();
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:10000;display:flex;align-items:center;justify-content:center;padding:14px;';
+  modal.innerHTML=`<div style="width:100%;max-width:460px;background:#0d0d30;border:1px solid rgba(122,173,255,0.45);border-radius:16px;overflow:hidden;">
+    <div style="padding:14px;background:linear-gradient(135deg,#162a5e,#0a143a);display:flex;justify-content:space-between;gap:10px;align-items:center;">
+      <div><div style="font-size:15px;font-weight:800;color:#7aadff;">👁️ Picks capturados</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(match.label)} · ${esc(match.d)} · ${S.adminQ?esc(S.adminQ):'Todas las quinielas'}</div></div>
+      <button onclick="document.getElementById('admin-real-ko-preds-modal').remove()" style="background:rgba(255,255,255,0.1);border:none;color:#fff;border-radius:50%;width:30px;height:30px;cursor:pointer;">✕</button>
+    </div>
+    <div style="padding:10px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid rgba(255,255,255,0.08);">Se muestran los pronósticos que los participantes ya capturaron para este partido, aunque el partido no haya empezado o el usuario no haya completado todos sus picks. Capturados: <strong style="color:#fff;">${rows.length}</strong>${missing?` · Sin captura: <strong style="color:#fff;">${missing}</strong>`:''}</div>
+    <div style="padding:12px;max-height:58vh;overflow:auto;">
+      ${rows.length?rows.map(r=>`<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:10px;border:1px solid rgba(255,255,255,0.08);border-radius:10px;margin-bottom:8px;background:rgba(255,255,255,0.04);">
+        <div style="min-width:0;"><div style="font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(r.name)}</div><div style="font-size:10px;color:var(--muted);margin-top:2px;">${esc(r.qn)} ${r.locked?'· 🔒 bloqueado':'· 📝 en progreso'}</div></div>
+        <div style="text-align:center;font-size:16px;font-weight:900;color:var(--gold);font-variant-numeric:tabular-nums;">${predLabel(r.p)}</div>
+      </div>`).join(''):`<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">Ningún participante ha capturado este partido todavía.</div>`}
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+};
+
   window.ADMIN_UNLOCK_REAL_KO=async id=>{
   const q=S.adminQ?getQ(S.adminQ):null;
   if(!q||!q.users){alert('Selecciona una quiniela primero.');return;}
